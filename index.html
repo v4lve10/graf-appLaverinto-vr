@@ -9,16 +9,6 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700&family=Montserrat:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        /* Estilos temporales hasta que style.css esté completo */
-        body {
-            margin: 0;
-            overflow: hidden;
-            font-family: 'Montserrat', sans-serif;
-            background: #0a0a12;
-            color: #fff;
-        }
-    </style>
 </head>
 <body>
     <!-- Pantalla de inicio -->
@@ -133,7 +123,6 @@
                     <div class="footer-link">
                         <i class="fas fa-graduation-cap"></i>
                         <span>Ángel Alejandro Maya Valverde 23201261</span>
-                         <span>Kalid Medina Sanchez</span>
                     </div>
                 </div>
                 
@@ -246,7 +235,61 @@
         </div>
     </div>
 
-    <!-- Scripts -->
+    <!-- Script de inicialización simple para debug -->
+    <script>
+        // Código de debug para ver si el botón funciona
+        console.log('🔍 Debug: Página cargada');
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('✅ DOM completamente cargado');
+            
+            const startButton = document.getElementById('start-button');
+            const startScreen = document.getElementById('start-screen');
+            const gameContainer = document.getElementById('game-container');
+            
+            if (startButton) {
+                console.log('✅ Botón encontrado:', startButton);
+                
+                startButton.addEventListener('click', function() {
+                    console.log('🎮 Botón clickeado!');
+                    
+                    // Ocultar pantalla de inicio
+                    startScreen.style.opacity = '0';
+                    startScreen.style.transition = 'opacity 0.8s ease';
+                    
+                    setTimeout(() => {
+                        startScreen.style.display = 'none';
+                        gameContainer.style.display = 'block';
+                        
+                        // Mostrar mensaje de que el juego cargaría aquí
+                        gameContainer.innerHTML = `
+                            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center;">
+                                <h2 style="color: #00a8ff; font-family: 'Orbitron', sans-serif;">¡JUEGO CARGADO!</h2>
+                                <p style="color: white;">El motor 3D se cargaría aquí.</p>
+                                <p style="color: #aaa;">Si ves esto, el botón funciona correctamente.</p>
+                                <button onclick="location.reload()" style="margin-top: 20px; padding: 10px 20px; background: #00a8ff; border: none; color: white; border-radius: 5px; cursor: pointer;">
+                                    Volver al menú
+                                </button>
+                            </div>
+                        `;
+                    }, 800);
+                });
+                
+                // Añadir estilo al botón por si el CSS no carga
+                startButton.style.cursor = 'pointer';
+                startButton.addEventListener('mouseover', () => {
+                    startButton.style.transform = 'scale(1.05)';
+                });
+                startButton.addEventListener('mouseout', () => {
+                    startButton.style.transform = 'scale(1)';
+                });
+            } else {
+                console.error('❌ Botón NO encontrado!');
+            }
+        });
+    </script>
+
+    <!-- Scripts de Three.js -->
     <script type="importmap">
         {
             "imports": {
