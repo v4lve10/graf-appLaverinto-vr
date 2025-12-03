@@ -88,6 +88,29 @@
                     </div>
                 </div>
                 
+                <!-- Controles -->
+                <div class="controls-info">
+                    <h3><i class="fas fa-gamepad"></i> CONTROLES</h3>
+                    <div class="controls-grid">
+                        <div class="control-item">
+                            <div class="control-key">W A S D</div>
+                            <div class="control-action">Moverse</div>
+                        </div>
+                        <div class="control-item">
+                            <div class="control-key">CLICK</div>
+                            <div class="control-action">Recoger llaves</div>
+                        </div>
+                        <div class="control-item">
+                            <div class="control-key">MOUSE</div>
+                            <div class="control-action">Mirar alrededor</div>
+                        </div>
+                        <div class="control-item">
+                            <div class="control-key">VR TRIGGER</div>
+                            <div class="control-action">Interactuar</div>
+                        </div>
+                    </div>
+                </div>
+                
                 <!-- Botón principal -->
                 <button id="start-button" class="tech-button">
                     <div class="button-content">
@@ -166,16 +189,16 @@
             <!-- Instrucciones en juego -->
             <div class="game-instructions">
                 <div class="instruction-item">
-                    <div class="instruction-key">
-                        <i class="fas fa-hand-pointer"></i>
-                    </div>
-                    <span>Recoge llaves</span>
+                    <div class="instruction-key">W A S D</div>
+                    <span>Moverse</span>
                 </div>
                 <div class="instruction-item">
-                    <div class="instruction-key">
-                        <i class="fas fa-arrows-alt"></i>
-                    </div>
-                    <span>Explora el laberinto</span>
+                    <div class="instruction-key">CLICK</div>
+                    <span>Recoger llaves</span>
+                </div>
+                <div class="instruction-item">
+                    <div class="instruction-key">ESC</div>
+                    <span>Menú</span>
                 </div>
             </div>
             
@@ -205,8 +228,8 @@
                         <div class="stat-label">COMPLETADO</div>
                     </div>
                     <div class="stat">
-                        <div class="stat-value"><i class="fas fa-clock"></i></div>
-                        <div class="stat-label">TIEMPO</div>
+                        <div class="stat-value"><i class="fas fa-gamepad"></i></div>
+                        <div class="stat-label">CONTROLES</div>
                     </div>
                 </div>
                 
@@ -233,61 +256,27 @@
                 </button>
             </div>
         </div>
-    </div>
-
-    <!-- Script de inicialización simple para debug -->
-    <script>
-        // Código de debug para ver si el botón funciona
-        console.log('🔍 Debug: Página cargada');
         
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('✅ DOM completamente cargado');
-            
-            const startButton = document.getElementById('start-button');
-            const startScreen = document.getElementById('start-screen');
-            const gameContainer = document.getElementById('game-container');
-            
-            if (startButton) {
-                console.log('✅ Botón encontrado:', startButton);
-                
-                startButton.addEventListener('click', function() {
-                    console.log('🎮 Botón clickeado!');
-                    
-                    // Ocultar pantalla de inicio
-                    startScreen.style.opacity = '0';
-                    startScreen.style.transition = 'opacity 0.8s ease';
-                    
-                    setTimeout(() => {
-                        startScreen.style.display = 'none';
-                        gameContainer.style.display = 'block';
-                        
-                        // Mostrar mensaje de que el juego cargaría aquí
-                        gameContainer.innerHTML = `
-                            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center;">
-                                <h2 style="color: #00a8ff; font-family: 'Orbitron', sans-serif;">¡JUEGO CARGADO!</h2>
-                                <p style="color: white;">El motor 3D se cargaría aquí.</p>
-                                <p style="color: #aaa;">Si ves esto, el botón funciona correctamente.</p>
-                                <button onclick="location.reload()" style="margin-top: 20px; padding: 10px 20px; background: #00a8ff; border: none; color: white; border-radius: 5px; cursor: pointer;">
-                                    Volver al menú
-                                </button>
-                            </div>
-                        `;
-                    }, 800);
-                });
-                
-                // Añadir estilo al botón por si el CSS no carga
-                startButton.style.cursor = 'pointer';
-                startButton.addEventListener('mouseover', () => {
-                    startButton.style.transform = 'scale(1.05)';
-                });
-                startButton.addEventListener('mouseout', () => {
-                    startButton.style.transform = 'scale(1)';
-                });
-            } else {
-                console.error('❌ Botón NO encontrado!');
-            }
-        });
-    </script>
+        <!-- Panel de controles móvil (solo en móviles) -->
+        <div id="mobile-controls" class="mobile-controls">
+            <div class="mobile-controls-row">
+                <button class="mobile-btn" id="btn-forward">
+                    <i class="fas fa-arrow-up"></i>
+                </button>
+            </div>
+            <div class="mobile-controls-row">
+                <button class="mobile-btn" id="btn-left">
+                    <i class="fas fa-arrow-left"></i>
+                </button>
+                <button class="mobile-btn" id="btn-backward">
+                    <i class="fas fa-arrow-down"></i>
+                </button>
+                <button class="mobile-btn" id="btn-right">
+                    <i class="fas fa-arrow-right"></i>
+                </button>
+            </div>
+        </div>
+    </div>
 
     <!-- Scripts de Three.js -->
     <script type="importmap">

@@ -12,6 +12,7 @@ html, body {
     background: #0a0a12;
     color: #fff;
     font-family: 'Montserrat', sans-serif;
+    touch-action: none;
 }
 
 /* ===== PANTALLA DE INICIO ===== */
@@ -232,6 +233,53 @@ html, body {
     color: #fff;
 }
 
+/* Sección de controles */
+.controls-info {
+    background: rgba(0, 20, 40, 0.3);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 30px;
+    border: 1px solid rgba(0, 168, 255, 0.2);
+}
+
+.controls-info h3 {
+    font-family: 'Orbitron', sans-serif;
+    color: #00fff7;
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.controls-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 15px;
+}
+
+.control-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+}
+
+.control-key {
+    font-family: 'Orbitron', sans-serif;
+    font-weight: bold;
+    color: #00a8ff;
+    font-size: 1.1rem;
+    margin-bottom: 5px;
+}
+
+.control-action {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.8);
+    text-align: center;
+}
+
 /* Botón tecnológico */
 .tech-button {
     position: relative;
@@ -366,6 +414,8 @@ html, body {
 canvas {
     display: block;
     outline: none;
+    width: 100%;
+    height: 100%;
 }
 
 /* Overlay de UI */
@@ -455,7 +505,7 @@ canvas {
 }
 
 .instruction-key {
-    width: 30px;
+    min-width: 60px;
     height: 30px;
     display: flex;
     align-items: center;
@@ -463,7 +513,10 @@ canvas {
     background: rgba(0, 168, 255, 0.2);
     border-radius: 6px;
     color: #00a8ff;
-    font-size: 0.9rem;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.8rem;
+    font-weight: bold;
+    padding: 0 10px;
 }
 
 /* Botón salir VR */
@@ -590,6 +643,45 @@ canvas {
     border-color: rgba(255, 255, 255, 0.4);
 }
 
+/* Controles móviles */
+.mobile-controls {
+    position: absolute;
+    bottom: 30px;
+    right: 30px;
+    display: none;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 100;
+}
+
+.mobile-controls-row {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+
+.mobile-btn {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: rgba(0, 168, 255, 0.3);
+    border: 2px solid rgba(0, 168, 255, 0.6);
+    color: white;
+    font-size: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+}
+
+.mobile-btn:active {
+    background: rgba(0, 168, 255, 0.6);
+    transform: scale(0.95);
+}
+
 /* Partículas */
 .particles-container {
     position: absolute;
@@ -639,6 +731,10 @@ canvas {
         grid-template-columns: repeat(2, 1fr);
     }
     
+    .controls-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
     .footer {
         flex-direction: column;
         gap: 20px;
@@ -669,7 +765,7 @@ canvas {
     }
     
     .game-instructions {
-        bottom: 20px;
+        bottom: 120px;
         left: 20px;
     }
     
@@ -677,10 +773,19 @@ canvas {
         bottom: 20px;
         right: 20px;
     }
+    
+    /* Mostrar controles móviles en móviles */
+    .mobile-controls {
+        display: flex;
+    }
 }
 
 @media (max-width: 480px) {
     .specs-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .controls-grid {
         grid-template-columns: 1fr;
     }
     
@@ -693,4 +798,33 @@ canvas {
         font-size: 0.9rem;
         letter-spacing: 2px;
     }
+    
+    .mobile-btn {
+        width: 50px;
+        height: 50px;
+        font-size: 1.2rem;
+    }
+}
+
+/* Estilos para el botón VR de Three.js */
+.custom-vr-button {
+    position: absolute !important;
+    bottom: 20px !important;
+    right: 20px !important;
+    z-index: 1000 !important;
+    background: linear-gradient(90deg, #00a8ff, #00fff7) !important;
+    border: none !important;
+    color: white !important;
+    padding: 12px 24px !important;
+    border-radius: 8px !important;
+    font-family: 'Orbitron', sans-serif !important;
+    font-weight: 600 !important;
+    letter-spacing: 1px !important;
+    cursor: pointer !important;
+    transition: all 0.3s ease !important;
+}
+
+.custom-vr-button:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 5px 15px rgba(0, 168, 255, 0.4) !important;
 }
