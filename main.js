@@ -12,11 +12,21 @@ const totalKeys = 3;
 let audioListener, windSound, victorySound;
 let gameStarted = false;
 
-// Variables para controles VR
+// Variables para VR
 let controller1, controller2;
 let controllerGrip1, controllerGrip2;
 let controllerModelFactory;
 let isInVR = false;
+
+// MOVIMIENTO VR - Nuevas variables
+let vrMoveForward = false;
+let vrMoveBackward = false;
+let vrMoveLeft = false;
+let vrMoveRight = false;
+let vrMoveVector = new THREE.Vector3();
+const vrMoveSpeed = 0.05;
+let lastControllerPosition = new THREE.Vector3();
+let movementEnabled = true;
 
 // Elementos DOM
 let startScreen, gameContainer, startButton;
@@ -24,7 +34,7 @@ let keyCounter, victoryPanel, restartButton, backToMenuButton, exitVRButton;
 
 // ==================== INICIALIZACIÓN ====================
 async function init() {
-    console.log('🎮 Configurando controles Meta Quest...');
+    console.log('🎮 Configurando movimiento para Meta Quest 3...');
     
     // Configurar elementos DOM
     startScreen = document.getElementById('start-screen');
@@ -64,11 +74,11 @@ function initThreeJS() {
     scene = new THREE.Scene();
     scene.fog = new THREE.Fog(0x0a0a12, 10, 50);
 
-    // Cámara (altura de persona: 1.6m)
+    // Cámara
     camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 100);
-    camera.position.set(0, 1.6, 3);
+    camera.position.set(0, 1.6, 5);
 
-    // Renderer con WebXR habilitado
+    // Renderer con WebXR
     renderer = new THREE.WebGLRenderer({ 
         antialias: true,
         alpha: true
@@ -76,8 +86,8 @@ function initThreeJS() {
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.shadowMap.enabled = true;
-    renderer.xr.enabled = true; // <-- IMPORTANTE para VR
-    renderer.xr.setReferenceSpaceType('local-floor'); // <-- Para Meta Quest
+    renderer.xr.enabled = true;
+    renderer.xr.setReferenceSpaceType('local-floor'); // IMPORTANTE para movimiento
     
     gameContainer.appendChild(renderer.domElement);
 
@@ -86,45 +96,46 @@ function initThreeJS() {
     controls.target.set(0, 1.6, 0);
     controls.enableDamping = true;
 
-    // Botón VR de Three.js
+    // Botón VR
     const vrButton = VRButton.createButton(renderer);
-    vrButton.style.position = 'absolute';
-    vrButton.style.bottom = '20px';
-    vrButton.style.right = '20px';
-    vrButton.style.zIndex = '1000';
+    vrButton.classList.add('custom-vr-button');
     document.body.appendChild(vrButton);
 
-    // Configurar controles VR
-    setupVRControllers();
+    // Configurar controles VR CON MOVIMIENTO
+    setupVRControllersWithMovement();
 
     // Eventos
     window.addEventListener('resize', onWindowResize);
+    
+    // Detectar cuando entramos/salimos de VR
+    renderer.xr.addEventListener('sessionstart', onVRSessionStart);
+    renderer.xr.addEventListener('sessionend', onVRSessionEnd);
     
     // Iniciar animación
     renderer.setAnimationLoop(animate);
 }
 
-// ==================== CONFIGURACIÓN DE CONTROLES META QUEST ====================
-function setupVRControllers() {
-    console.log('🎮 Configurando controles Meta Quest...');
+// ==================== CONFIGURACIÓN DE MOVIMIENTO VR ====================
+function setupVRControllersWithMovement() {
+    console.log('🎮 Configurando movimiento con joystick para Meta Quest 3...');
     
     // Crear modelo de controladores
     controllerModelFactory = new XRControllerModelFactory();
     
-    // Controlador 1 (mano izquierda/ derecha)
+    // Controlador 1 (mano izquierda - para movimiento)
     controller1 = renderer.xr.getController(0);
     controller1.addEventListener('selectstart', onSelectStart);
     controller1.addEventListener('selectend', onSelectEnd);
-    controller1.addEventListener('squeezestart', onSqueezeStart);
-    controller1.addEventListener('squeezeend', onSqueezeEnd);
+    controller1.addEventListener('connected', onControllerConnected);
+    controller1.addEventListener('disconnected', onControllerDisconnected);
     scene.add(controller1);
     
-    // Grip para el controlador 1 (modelo 3D real)
+    // Grip para el controlador 1
     controllerGrip1 = renderer.xr.getControllerGrip(0);
     controllerGrip1.add(controllerModelFactory.createControllerModel(controllerGrip1));
     scene.add(controllerGrip1);
     
-    // Controlador 2
+    // Controlador 2 (mano derecha - para interacción)
     controller2 = renderer.xr.getController(1);
     controller2.addEventListener('selectstart', onSelectStart);
     controller2.addEventListener('selectend', onSelectEnd);
@@ -134,28 +145,202 @@ function setupVRControllers() {
     controllerGrip2.add(controllerModelFactory.createControllerModel(controllerGrip2));
     scene.add(controllerGrip2);
     
-    // Rayo desde controladores (para apuntar)
+    // Rayo para apuntar (solo en controlador derecho)
     const geometry = new THREE.BufferGeometry().setFromPoints([
         new THREE.Vector3(0, 0, 0),
         new THREE.Vector3(0, 0, -1)
     ]);
     
-    const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0x00ff00, linewidth: 2 }));
-    line.name = 'line';
-    line.scale.z = 5;
+    const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ 
+        color: 0x00ff00, 
+        linewidth: 2,
+        transparent: true,
+        opacity: 0.7
+    }));
+    line.name = 'pointer';
+    line.scale.z = 3;
     
-    controller1.add(line.clone());
     controller2.add(line.clone());
     
-    console.log('✅ Controles VR configurados para Meta Quest');
+    console.log('✅ Sistema de movimiento VR configurado');
 }
 
-// ==================== EVENTOS DE CONTROLES VR ====================
+function onControllerConnected(event) {
+    console.log('🎮 Controlador conectado:', event.data);
+    const controller = event.target;
+    
+    // Configurar gamepad para joystick
+    if (controller.gamepad) {
+        console.log('🕹️ Gamepad detectado:', controller.gamepad);
+        console.log('📊 Botones:', controller.gamepad.buttons.length);
+        console.log('🎮 Ejes:', controller.gamepad.axes.length);
+    }
+}
+
+function onControllerDisconnected(event) {
+    console.log('🎮 Controlador desconectado');
+}
+
+function onVRSessionStart() {
+    console.log('🚀 Sesión VR iniciada - Movimiento habilitado');
+    isInVR = true;
+    movementEnabled = true;
+    
+    // Ocultar instrucciones de teclado en VR
+    document.querySelectorAll('.instruction-item').forEach(item => {
+        item.style.opacity = '0.5';
+    });
+}
+
+function onVRSessionEnd() {
+    console.log('👋 Sesión VR terminada');
+    isInVR = false;
+    
+    // Mostrar instrucciones de teclado nuevamente
+    document.querySelectorAll('.instruction-item').forEach(item => {
+        item.style.opacity = '1';
+    });
+}
+
+// ==================== MOVIMIENTO CON JOYSTICK ====================
+function updateVRMovementWithJoystick() {
+    if (!isInVR || !movementEnabled) return;
+    
+    const session = renderer.xr.getSession();
+    if (!session) return;
+    
+    // Obtener input sources (controladores)
+    const inputSources = session.inputSources;
+    
+    // Buscar el joystick del controlador izquierdo (normalmente índice 0)
+    if (inputSources && inputSources[0] && inputSources[0].gamepad) {
+        const gamepad = inputSources[0].gamepad;
+        
+        // En Meta Quest, el joystick está en los ejes 2 y 3
+        // axes[0] y axes[1] suelen ser el joystick táctil
+        if (gamepad.axes.length >= 2) {
+            const joystickX = gamepad.axes[0]; // Horizontal: -1 (izquierda) a 1 (derecha)
+            const joystickY = gamepad.axes[1]; // Vertical: -1 (atrás) a 1 (adelante)
+            
+            // Umbral para evitar drift
+            const deadZone = 0.15;
+            
+            // MOVIMIENTO HACIA ADELANTE/ATRÁS
+            if (Math.abs(joystickY) > deadZone) {
+                // Calcular dirección basada en la rotación de la cabeza
+                const forward = new THREE.Vector3(0, 0, -1);
+                forward.applyQuaternion(camera.quaternion);
+                forward.y = 0; // Mantener en plano horizontal
+                forward.normalize();
+                
+                // Mover en la dirección de la cabeza
+                camera.position.add(forward.multiplyScalar(-joystickY * vrMoveSpeed));
+                
+                // Debug en consola
+                if (Math.abs(joystickY) > 0.5) {
+                    console.log(`🎮 Movimiento Y: ${joystickY.toFixed(2)}`);
+                }
+            }
+            
+            // MOVIMIENTO LATERAL (STRAFING)
+            if (Math.abs(joystickX) > deadZone) {
+                // Calcular derecha basada en la rotación de la cabeza
+                const right = new THREE.Vector3(1, 0, 0);
+                right.applyQuaternion(camera.quaternion);
+                right.y = 0; // Mantener en plano horizontal
+                right.normalize();
+                
+                // Mover lateralmente
+                camera.position.add(right.multiplyScalar(joystickX * vrMoveSpeed));
+            }
+            
+            // TELEPORTACIÓN CON JOYSTICK (alternativa)
+            if (gamepad.buttons && gamepad.buttons[1] && gamepad.buttons[1].pressed) {
+                // Botón B/Y para teleportación rápida
+                setupTeleportation();
+            }
+        }
+        
+        // MOVIMIENTO CON BOTONES (alternativa si el joystick no funciona)
+        if (gamepad.buttons.length >= 4) {
+            // Botón del joystick hacia arriba (normalmente botón 12 o similar)
+            if (gamepad.buttons[12] && gamepad.buttons[12].pressed) {
+                vrMoveForward = true;
+            } else {
+                vrMoveForward = false;
+            }
+            
+            // Botón del joystick hacia abajo
+            if (gamepad.buttons[13] && gamepad.buttons[13].pressed) {
+                vrMoveBackward = true;
+            } else {
+                vrMoveBackward = false;
+            }
+        }
+    }
+    
+    // MOVIMIENTO CON BOTONES ALTERNATIVO
+    if (vrMoveForward) {
+        const forward = new THREE.Vector3(0, 0, -1);
+        forward.applyQuaternion(camera.quaternion);
+        forward.y = 0;
+        forward.normalize();
+        camera.position.add(forward.multiplyScalar(vrMoveSpeed));
+    }
+    
+    if (vrMoveBackward) {
+        const forward = new THREE.Vector3(0, 0, 1);
+        forward.applyQuaternion(camera.quaternion);
+        forward.y = 0;
+        forward.normalize();
+        camera.position.add(forward.multiplyScalar(vrMoveSpeed));
+    }
+}
+
+// Sistema de teleportación como alternativa
+function setupTeleportation() {
+    if (!controller2) return;
+    
+    const raycaster = new THREE.Raycaster();
+    const direction = new THREE.Vector3(0, 0, -1);
+    direction.applyQuaternion(controller2.quaternion);
+    
+    raycaster.set(controller2.position, direction);
+    
+    const floorIntersects = raycaster.intersectObjects(scene.children.filter(obj => 
+        obj.name === 'floor'
+    ));
+    
+    if (floorIntersects.length > 0) {
+        const targetPos = floorIntersects[0].point;
+        targetPos.y += 1.6; // Altura de la cámara
+        
+        // Interpolación suave
+        camera.position.lerp(targetPos, 0.3);
+        
+        // Indicador visual
+        const indicator = new THREE.Mesh(
+            new THREE.RingGeometry(0.1, 0.2, 32),
+            new THREE.MeshBasicMaterial({ 
+                color: 0x00ff00, 
+                side: THREE.DoubleSide,
+                transparent: true
+            })
+        );
+        indicator.position.copy(floorIntersects[0].point);
+        indicator.position.y += 0.01;
+        indicator.rotation.x = -Math.PI / 2;
+        scene.add(indicator);
+        
+        setTimeout(() => scene.remove(indicator), 300);
+    }
+}
+
+// ==================== EVENTOS DE CONTROLES ====================
 function onSelectStart(event) {
     const controller = event.target;
-    console.log('🎮 Trigger presionado en controlador VR');
     
-    // Lanzar rayo para detectar objetos
+    // Lanzar rayo desde el controlador
     const raycaster = new THREE.Raycaster();
     const direction = new THREE.Vector3(0, 0, -1);
     direction.applyQuaternion(controller.quaternion);
@@ -169,51 +354,21 @@ function onSelectStart(event) {
         return;
     }
     
-    // Buscar paredes u otros objetos
-    const wallIntersects = raycaster.intersectObjects(scene.children.filter(obj => obj.name === 'wall'));
-    if (wallIntersects.length > 0) {
-        console.log('🧱 Apuntando a pared');
-        // Podrías añadir interacción con paredes aquí
-    }
-    
-    // Efecto visual al presionar trigger
-    const line = controller.getObjectByName('line');
-    if (line) {
-        line.material.color.setHex(0xff0000);
-        line.scale.z = 3;
+    // Efecto visual
+    const pointer = controller.getObjectByName('pointer');
+    if (pointer) {
+        pointer.material.color.setHex(0xff0000);
+        pointer.material.opacity = 1;
     }
 }
 
 function onSelectEnd(event) {
     const controller = event.target;
-    
-    // Restaurar línea
-    const line = controller.getObjectByName('line');
-    if (line) {
-        line.material.color.setHex(0x00ff00);
-        line.scale.z = 5;
+    const pointer = controller.getObjectByName('pointer');
+    if (pointer) {
+        pointer.material.color.setHex(0x00ff00);
+        pointer.material.opacity = 0.7;
     }
-}
-
-function onSqueezeStart(event) {
-    console.log('🎮 Grip presionado - Movimiento en VR');
-    // El grip se usa para moverte en algunas apps de VR
-}
-
-function onSqueezeEnd(event) {
-    console.log('🎮 Grip liberado');
-}
-
-// ==================== MOVIMIENTO EN VR ====================
-function updateVRMovement() {
-    if (!isInVR || !renderer.xr.isPresenting) return;
-    
-    // Obtener información de los joysticks
-    const session = renderer.xr.getSession();
-    if (!session) return;
-    
-    // Para Meta Quest, el movimiento se maneja con el joystick
-    // Esta función se llamaría en cada frame para actualizar posición
 }
 
 // ==================== JUEGO ====================
@@ -225,9 +380,9 @@ async function initGame() {
     createLighting();
     gameStarted = true;
     
-    console.log('✅ Juego listo para Meta Quest');
-    console.log('🎯 Usa el trigger para recoger llaves');
-    console.log('🎮 Los controladores deben ser visibles');
+    console.log('✅ Juego listo');
+    console.log('🎮 Meta Quest 3: Usa el joystick para moverte');
+    console.log('🎯 Presiona trigger para recoger llaves');
 }
 
 async function loadEnvironment() {
@@ -319,13 +474,16 @@ function createKeys() {
         const keyMaterial = new THREE.MeshStandardMaterial({ 
             color: 0xFFD700,
             metalness: 0.8,
-            roughness: 0.2
+            roughness: 0.2,
+            emissive: 0xFFD700,
+            emissiveIntensity: 0.3
         });
         
         const key = new THREE.Mesh(keyGeometry, keyMaterial);
         key.position.copy(keyPositions[i]);
         key.userData.isKey = true;
         key.userData.collected = false;
+        key.name = `key_${i}`;
         
         const keyLight = new THREE.PointLight(0xFFD700, 0.5, 3);
         keyLight.position.copy(key.position);
@@ -353,17 +511,19 @@ function animate() {
         keys.forEach(key => {
             if (key && !key.userData.collected) {
                 key.rotation.y += 0.02;
+                // Flotar suavemente
+                key.position.y = 1.5 + Math.sin(Date.now() * 0.001 + key.userData.id) * 0.1;
             }
         });
         
-        // Actualizar controles si no estamos en VR
-        if (!renderer.xr.isPresenting) {
+        // Actualizar controles modo escritorio
+        if (!isInVR) {
             controls.update();
         }
         
         // Actualizar movimiento VR si estamos en VR
-        if (renderer.xr.isPresenting) {
-            updateVRMovement();
+        if (isInVR) {
+            updateVRMovementWithJoystick();
         }
     }
     
@@ -376,19 +536,61 @@ function collectKey(key) {
     key.visible = false;
     keysCollected++;
     
+    // Efecto de partículas
+    createKeyParticles(key.position);
+    
     updateKeyCounter();
     
     if (keysCollected >= totalKeys) {
         setTimeout(showVictory, 1000);
     }
     
-    console.log(`🗝️ Llave recogida en VR! Total: ${keysCollected}/${totalKeys}`);
+    console.log(`🗝️ Llave recogida! Total: ${keysCollected}/${totalKeys}`);
+}
+
+function createKeyParticles(position) {
+    for (let i = 0; i < 15; i++) {
+        const geometry = new THREE.SphereGeometry(0.05, 8, 8);
+        const material = new THREE.MeshBasicMaterial({ color: 0xFFD700 });
+        const particle = new THREE.Mesh(geometry, material);
+        
+        particle.position.copy(position);
+        particle.userData.velocity = new THREE.Vector3(
+            (Math.random() - 0.5) * 0.2,
+            Math.random() * 0.2,
+            (Math.random() - 0.5) * 0.2
+        );
+        particle.userData.life = 1.0;
+        
+        scene.add(particle);
+        
+        function animateParticle() {
+            if (particle.userData.life > 0) {
+                particle.position.add(particle.userData.velocity);
+                particle.userData.velocity.y -= 0.005;
+                particle.userData.life -= 0.03;
+                particle.material.opacity = particle.userData.life;
+                requestAnimationFrame(animateParticle);
+            } else {
+                scene.remove(particle);
+            }
+        }
+        
+        animateParticle();
+    }
 }
 
 function updateKeyCounter() {
     const counterValue = document.querySelector('.counter-value');
     if (counterValue) {
         counterValue.textContent = `${keysCollected}/${totalKeys}`;
+        // Cambiar color cuando se acercan a ganar
+        if (keysCollected === totalKeys) {
+            counterValue.style.color = '#0f0';
+            counterValue.style.textShadow = '0 0 10px #0f0';
+        } else if (keysCollected >= totalKeys - 1) {
+            counterValue.style.color = '#ffaa00';
+        }
     }
 }
 
@@ -396,12 +598,11 @@ function showVictory() {
     if (victorySound) victorySound.play();
     victoryPanel.style.display = 'flex';
     
-    // Confeti
     createConfetti();
 }
 
 function createConfetti() {
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < 100; i++) {
         const geometry = new THREE.PlaneGeometry(0.1, 0.1);
         const material = new THREE.MeshBasicMaterial({
             color: Math.random() * 0xffffff,
@@ -424,7 +625,7 @@ function createConfetti() {
         scene.add(confetti);
         
         const speed = 0.02 + Math.random() * 0.03;
-        const rotationSpeed = (Math.random() - 0.5) * 0.1;
+        const rotationSpeed = (Math.random() - 0.5) * 0.2;
         
         function animateConfetti() {
             confetti.position.y -= speed;
@@ -514,21 +715,61 @@ function exitVR() {
 // ==================== INICIAR ====================
 window.addEventListener('DOMContentLoaded', init);
 
-// Funciones de debug para probar desde consola
-window.debugVR = {
-    showControllers: () => {
-        console.log('Controladores:', { controller1, controller2 });
-    },
-    testTrigger: () => {
-        console.log('Simulando trigger...');
-        if (controller1) {
-            const event = { target: controller1 };
-            onSelectStart(event);
-            setTimeout(() => onSelectEnd(event), 500);
+// ==================== DEBUG PARA META QUEST 3 ====================
+window.debugQuest3 = {
+    // Ver estado de gamepad
+    showGamepadInfo: () => {
+        const session = renderer.xr.getSession();
+        if (session && session.inputSources && session.inputSources[0]) {
+            const gamepad = session.inputSources[0].gamepad;
+            console.log('🕹️ Gamepad Info:', {
+                id: gamepad.id,
+                index: gamepad.index,
+                buttons: gamepad.buttons.map((b, i) => `${i}: ${b.pressed ? 'PRESSED' : 'released'}`),
+                axes: gamepad.axes.map((a, i) => `${i}: ${a.toFixed(3)}`)
+            });
+        } else {
+            console.log('❌ No hay gamepad activo');
         }
     },
+    
+    // Probar ejes del joystick
+    testJoystick: () => {
+        setInterval(() => {
+            const session = renderer.xr.getSession();
+            if (session && session.inputSources && session.inputSources[0]) {
+                const gamepad = session.inputSources[0].gamepad;
+                if (gamepad.axes.length >= 2) {
+                    const x = gamepad.axes[0];
+                    const y = gamepad.axes[1];
+                    if (Math.abs(x) > 0.1 || Math.abs(y) > 0.1) {
+                        console.log(`🎮 Joystick: X=${x.toFixed(2)}, Y=${y.toFixed(2)}`);
+                    }
+                }
+            }
+        }, 1000);
+    },
+    
+    // Forzar movimiento
+    moveForward: () => {
+        const forward = new THREE.Vector3(0, 0, -1);
+        forward.applyQuaternion(camera.quaternion);
+        forward.y = 0;
+        forward.normalize();
+        camera.position.add(forward.multiplyScalar(0.5));
+        console.log('📍 Movido hacia adelante');
+    },
+    
+    // Resetear posición
     resetPosition: () => {
         camera.position.set(0, 1.6, 5);
-        console.log('Posición reiniciada');
+        camera.rotation.set(0, 0, 0);
+        console.log('📍 Posición reiniciada');
+    },
+    
+    // Habilitar/deshabilitar movimiento
+    toggleMovement: () => {
+        movementEnabled = !movementEnabled;
+        console.log(`🎮 Movimiento ${movementEnabled ? 'HABILITADO' : 'DESHABILITADO'}`);
     }
 };
