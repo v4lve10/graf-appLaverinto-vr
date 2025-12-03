@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
 
-// ==================== VARIABLES GLOBALES ====================
+// Variables globales
 let scene, camera, renderer, controls;
 let keys = [];
 let keysCollected = 0;
@@ -11,31 +12,19 @@ const totalKeys = 3;
 let audioListener, windSound, victorySound;
 let gameStarted = false;
 
+// Variables para controles VR
+let controller1, controller2;
+let controllerGrip1, controllerGrip2;
+let controllerModelFactory;
+let isInVR = false;
+
 // Elementos DOM
 let startScreen, gameContainer, startButton;
 let keyCounter, victoryPanel, restartButton, backToMenuButton, exitVRButton;
 
-// ==================== CONTROLES DE MOVIMIENTO ====================
-// Variables para movimiento con teclado
-let moveForward = false;
-let moveBackward = false;
-let moveLeft = false;
-let moveRight = false;
-const moveSpeed = 0.1;
-
-// Variables para controles móviles
-let mobileForward = false;
-let mobileBackward = false;
-let mobileLeft = false;
-let mobileRight = false;
-
-// Variables para controles VR
-let controller1, controller2;
-let teleportRing;
-
 // ==================== INICIALIZACIÓN ====================
 async function init() {
-    console.log('🚀 Inicializando juego VR...');
+    console.log('🎮 Configurando controles Meta Quest...');
     
     // Configurar elementos DOM
     startScreen = document.getElementById('start-screen');
@@ -47,45 +36,17 @@ async function init() {
     backToMenuButton = document.getElementById('back-to-menu');
     exitVRButton = document.getElementById('exit-vr-button');
     
-    // Verificar elementos
-    if (!startButton) {
-        console.error('❌ Botón no encontrado');
-        return;
-    }
-    
-    console.log('✅ Elementos DOM cargados');
-    
-    // Configurar eventos
-    setupEventListeners();
-    
-    // Crear partículas
-    createParticles();
-    
-    console.log('✅ Juego inicializado - Listo para jugar');
-}
-
-// ==================== EVENT LISTENERS ====================
-function setupEventListeners() {
-    // Botón de inicio
+    // Event listeners
     startButton.addEventListener('click', startGame);
-    
-    // Botones del juego
     restartButton.addEventListener('click', restartGame);
     backToMenuButton.addEventListener('click', backToMenu);
     exitVRButton.addEventListener('click', exitVR);
     
-    // Controles móviles
-    setupMobileControls();
-    
-    // Actualizar contador inicial
     updateKeyCounter();
+    createParticles();
 }
 
-// ==================== INICIAR JUEGO ====================
 function startGame() {
-    console.log('🎮 Iniciando juego...');
-    
-    // Animación de transición
     startScreen.style.opacity = '0';
     startScreen.style.transition = 'opacity 0.8s ease';
     
@@ -93,308 +54,113 @@ function startGame() {
         startScreen.style.display = 'none';
         gameContainer.style.display = 'block';
         
-        // Inicializar Three.js
         initThreeJS();
-        
-        // Inicializar controles de movimiento
-        initMovementControls();
-        
-        // Inicializar el juego
         initGame();
     }, 800);
 }
 
-// ==================== THREE.JS ====================
 function initThreeJS() {
-    console.log('🖥️ Inicializando Three.js...');
-    
-    try {
-        // 1. Escena
-        scene = new THREE.Scene();
-        scene.fog = new THREE.Fog(0x0a0a12, 10, 50);
+    // Escena
+    scene = new THREE.Scene();
+    scene.fog = new THREE.Fog(0x0a0a12, 10, 50);
 
-        // 2. Cámara
-        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 1.6, 5);
+    // Cámara (altura de persona: 1.6m)
+    camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 1.6, 3);
 
-        // 3. Renderer
-        renderer = new THREE.WebGLRenderer({ 
-            antialias: true,
-            alpha: true
-        });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio);
-        renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-        renderer.xr.enabled = true;
-        renderer.outputEncoding = THREE.sRGBEncoding;
-        renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        renderer.toneMappingExposure = 1.0;
-        
-        // Añadir canvas al contenedor
-        gameContainer.appendChild(renderer.domElement);
-
-        // 4. Controles (modo escritorio)
-        controls = new OrbitControls(camera, renderer.domElement);
-        controls.target.set(0, 1.6, 0);
-        controls.enableDamping = true;
-        controls.dampingFactor = 0.05;
-        controls.update();
-
-        // 5. Botón VR
-        const vrButton = VRButton.createButton(renderer);
-        vrButton.classList.add('custom-vr-button');
-        document.body.appendChild(vrButton);
-
-        // 6. Configurar controles VR
-        setupVRControllers();
-        
-        // 7. Configurar teleportación
-        setupTeleportation();
-
-        // 8. Eventos de ventana
-        window.addEventListener('resize', onWindowResize);
-        renderer.domElement.addEventListener('click', onDocumentClick);
-        
-        // 9. Iniciar loop de animación
-        renderer.setAnimationLoop(animate);
-        
-        console.log('✅ Three.js inicializado');
-        
-    } catch (error) {
-        console.error('❌ Error en Three.js:', error);
-        showError('Error al cargar el motor 3D');
-    }
-}
-
-// ==================== CONTROLES DE MOVIMIENTO ====================
-function initMovementControls() {
-    console.log('🎮 Configurando controles...');
-    
-    // Teclado
-    document.addEventListener('keydown', onKeyDown);
-    document.addEventListener('keyup', onKeyUp);
-    
-    // También configurar tecla ESC para menú
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            backToMenu();
-        }
+    // Renderer con WebXR habilitado
+    renderer = new THREE.WebGLRenderer({ 
+        antialias: true,
+        alpha: true
     });
-}
-
-function onKeyDown(event) {
-    switch (event.code) {
-        case 'KeyW':
-        case 'ArrowUp':
-            moveForward = true;
-            break;
-        case 'KeyS':
-        case 'ArrowDown':
-            moveBackward = true;
-            break;
-        case 'KeyA':
-        case 'ArrowLeft':
-            moveLeft = true;
-            break;
-        case 'KeyD':
-        case 'ArrowRight':
-            moveRight = true;
-            break;
-        case 'Space':
-            // Salto simple
-            if (!renderer.xr.isPresenting && camera.position.y <= 1.6) {
-                camera.position.y += 0.5;
-            }
-            break;
-    }
-}
-
-function onKeyUp(event) {
-    switch (event.code) {
-        case 'KeyW':
-        case 'ArrowUp':
-            moveForward = false;
-            break;
-        case 'KeyS':
-        case 'ArrowDown':
-            moveBackward = false;
-            break;
-        case 'KeyA':
-        case 'ArrowLeft':
-            moveLeft = false;
-            break;
-        case 'KeyD':
-        case 'ArrowRight':
-            moveRight = false;
-            break;
-    }
-}
-
-// Controles móviles táctiles
-function setupMobileControls() {
-    const btnForward = document.getElementById('btn-forward');
-    const btnBackward = document.getElementById('btn-backward');
-    const btnLeft = document.getElementById('btn-left');
-    const btnRight = document.getElementById('btn-right');
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.shadowMap.enabled = true;
+    renderer.xr.enabled = true; // <-- IMPORTANTE para VR
+    renderer.xr.setReferenceSpaceType('local-floor'); // <-- Para Meta Quest
     
-    if (btnForward) {
-        btnForward.addEventListener('touchstart', () => mobileForward = true);
-        btnForward.addEventListener('touchend', () => mobileForward = false);
-        btnForward.addEventListener('mousedown', () => mobileForward = true);
-        btnForward.addEventListener('mouseup', () => mobileForward = false);
-        btnForward.addEventListener('mouseleave', () => mobileForward = false);
-    }
+    gameContainer.appendChild(renderer.domElement);
+
+    // Controles para modo escritorio
+    controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 1.6, 0);
+    controls.enableDamping = true;
+
+    // Botón VR de Three.js
+    const vrButton = VRButton.createButton(renderer);
+    vrButton.style.position = 'absolute';
+    vrButton.style.bottom = '20px';
+    vrButton.style.right = '20px';
+    vrButton.style.zIndex = '1000';
+    document.body.appendChild(vrButton);
+
+    // Configurar controles VR
+    setupVRControllers();
+
+    // Eventos
+    window.addEventListener('resize', onWindowResize);
     
-    if (btnBackward) {
-        btnBackward.addEventListener('touchstart', () => mobileBackward = true);
-        btnBackward.addEventListener('touchend', () => mobileBackward = false);
-        btnBackward.addEventListener('mousedown', () => mobileBackward = true);
-        btnBackward.addEventListener('mouseup', () => mobileBackward = false);
-        btnBackward.addEventListener('mouseleave', () => mobileBackward = false);
-    }
-    
-    if (btnLeft) {
-        btnLeft.addEventListener('touchstart', () => mobileLeft = true);
-        btnLeft.addEventListener('touchend', () => mobileLeft = false);
-        btnLeft.addEventListener('mousedown', () => mobileLeft = true);
-        btnLeft.addEventListener('mouseup', () => mobileLeft = false);
-        btnLeft.addEventListener('mouseleave', () => mobileLeft = false);
-    }
-    
-    if (btnRight) {
-        btnRight.addEventListener('touchstart', () => mobileRight = true);
-        btnRight.addEventListener('touchend', () => mobileRight = false);
-        btnRight.addEventListener('mousedown', () => mobileRight = true);
-        btnRight.addEventListener('mouseup', () => mobileRight = false);
-        btnRight.addEventListener('mouseleave', () => mobileRight = false);
-    }
+    // Iniciar animación
+    renderer.setAnimationLoop(animate);
 }
 
-// Actualizar movimiento en cada frame
-function updateMovement() {
-    // Solo mover en modo escritorio (no VR)
-    if (!renderer.xr.isPresenting) {
-        // Combinar controles teclado y móviles
-        const forward = moveForward || mobileForward;
-        const backward = moveBackward || mobileBackward;
-        const left = moveLeft || mobileLeft;
-        const right = moveRight || mobileRight;
-        
-        if (forward) {
-            camera.position.x -= Math.sin(camera.rotation.y) * moveSpeed;
-            camera.position.z -= Math.cos(camera.rotation.y) * moveSpeed;
-        }
-        if (backward) {
-            camera.position.x += Math.sin(camera.rotation.y) * moveSpeed;
-            camera.position.z += Math.cos(camera.rotation.y) * moveSpeed;
-        }
-        if (left) {
-            camera.position.x -= Math.cos(camera.rotation.y) * moveSpeed;
-            camera.position.z += Math.sin(camera.rotation.y) * moveSpeed;
-        }
-        if (right) {
-            camera.position.x += Math.cos(camera.rotation.y) * moveSpeed;
-            camera.position.z -= Math.sin(camera.rotation.y) * moveSpeed;
-        }
-        
-        // Gravedad simple
-        if (camera.position.y > 1.6) {
-            camera.position.y -= 0.05;
-        }
-    }
-}
-
-// ==================== INICIALIZAR JUEGO ====================
-async function initGame() {
-    console.log('🎮 Inicializando elementos del juego...');
-    
-    try {
-        await loadEnvironment();
-        loadAudio();
-        createMaze();
-        createKeys();
-        createLighting();
-        gameStarted = true;
-        
-        console.log('✅ Juego listo');
-        console.log('🎯 Encuentra las 3 llaves doradas');
-        console.log('🕹️ Controles: WASD para moverte, click en las llaves');
-        
-    } catch (error) {
-        console.error('❌ Error al inicializar el juego:', error);
-    }
-}
-
-// ==================== ANIMACIÓN ====================
-function animate() {
-    if (gameStarted) {
-        // Rotar llaves
-        keys.forEach(key => {
-            if (key && !key.userData.collected) {
-                key.rotation.y += 0.02;
-            }
-        });
-        
-        // Actualizar controles y movimiento
-        if (!renderer.xr.isPresenting) {
-            controls.update();
-            updateMovement();
-        }
-    }
-    
-    // Renderizar escena
-    renderer.render(scene, camera);
-}
-
-// ==================== CONTROLES VR ====================
+// ==================== CONFIGURACIÓN DE CONTROLES META QUEST ====================
 function setupVRControllers() {
+    console.log('🎮 Configurando controles Meta Quest...');
+    
+    // Crear modelo de controladores
+    controllerModelFactory = new XRControllerModelFactory();
+    
+    // Controlador 1 (mano izquierda/ derecha)
     controller1 = renderer.xr.getController(0);
+    controller1.addEventListener('selectstart', onSelectStart);
+    controller1.addEventListener('selectend', onSelectEnd);
+    controller1.addEventListener('squeezestart', onSqueezeStart);
+    controller1.addEventListener('squeezeend', onSqueezeEnd);
+    scene.add(controller1);
+    
+    // Grip para el controlador 1 (modelo 3D real)
+    controllerGrip1 = renderer.xr.getControllerGrip(0);
+    controllerGrip1.add(controllerModelFactory.createControllerModel(controllerGrip1));
+    scene.add(controllerGrip1);
+    
+    // Controlador 2
     controller2 = renderer.xr.getController(1);
+    controller2.addEventListener('selectstart', onSelectStart);
+    controller2.addEventListener('selectend', onSelectEnd);
+    scene.add(controller2);
     
-    // Modelo simple para los controllers
-    const controllerModel = (controller) => {
-        const geometry = new THREE.BoxGeometry(0.05, 0.05, 0.15);
-        const material = new THREE.MeshBasicMaterial({ color: 0x00a8ff });
-        const mesh = new THREE.Mesh(geometry, material);
-        controller.add(mesh);
-    };
+    controllerGrip2 = renderer.xr.getControllerGrip(1);
+    controllerGrip2.add(controllerModelFactory.createControllerModel(controllerGrip2));
+    scene.add(controllerGrip2);
     
-    if (controller1) {
-        controllerModel(controller1);
-        scene.add(controller1);
-        
-        // Evento trigger para recoger llaves
-        controller1.addEventListener('selectstart', onVRSelect);
-    }
+    // Rayo desde controladores (para apuntar)
+    const geometry = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(0, 0, -1)
+    ]);
     
-    if (controller2) {
-        controllerModel(controller2);
-        scene.add(controller2);
-    }
+    const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0x00ff00, linewidth: 2 }));
+    line.name = 'line';
+    line.scale.z = 5;
+    
+    controller1.add(line.clone());
+    controller2.add(line.clone());
+    
+    console.log('✅ Controles VR configurados para Meta Quest');
 }
 
-function setupTeleportation() {
-    // Anillo de teleportación
-    const geometry = new THREE.RingGeometry(0.1, 0.2, 32);
-    const material = new THREE.MeshBasicMaterial({ 
-        color: 0x00ff00, 
-        side: THREE.DoubleSide,
-        transparent: true,
-        opacity: 0.5 
-    });
-    teleportRing = new THREE.Mesh(geometry, material);
-    teleportRing.visible = false;
-    teleportRing.rotation.x = -Math.PI / 2;
-    scene.add(teleportRing);
-}
-
-function onVRSelect() {
-    if (!controller1) return;
+// ==================== EVENTOS DE CONTROLES VR ====================
+function onSelectStart(event) {
+    const controller = event.target;
+    console.log('🎮 Trigger presionado en controlador VR');
     
-    // Raycaster desde el controller
+    // Lanzar rayo para detectar objetos
     const raycaster = new THREE.Raycaster();
-    raycaster.setFromCamera(new THREE.Vector2(0, 0), controller1);
+    const direction = new THREE.Vector3(0, 0, -1);
+    direction.applyQuaternion(controller.quaternion);
+    
+    raycaster.set(controller.position, direction);
     
     // Buscar llaves
     const keyIntersects = raycaster.intersectObjects(keys.filter(k => !k.userData.collected));
@@ -403,27 +169,67 @@ function onVRSelect() {
         return;
     }
     
-    // Buscar piso para teleportación
-    const floorIntersects = raycaster.intersectObjects(scene.children.filter(obj => 
-        obj.name === 'floor' || (obj.geometry && obj.geometry.type === 'PlaneGeometry')
-    ));
+    // Buscar paredes u otros objetos
+    const wallIntersects = raycaster.intersectObjects(scene.children.filter(obj => obj.name === 'wall'));
+    if (wallIntersects.length > 0) {
+        console.log('🧱 Apuntando a pared');
+        // Podrías añadir interacción con paredes aquí
+    }
     
-    if (floorIntersects.length > 0) {
-        teleportRing.position.copy(floorIntersects[0].point);
-        teleportRing.position.y += 0.01;
-        teleportRing.visible = true;
-        
-        setTimeout(() => {
-            if (teleportRing.visible) {
-                camera.position.x = teleportRing.position.x;
-                camera.position.z = teleportRing.position.z;
-                teleportRing.visible = false;
-            }
-        }, 300);
+    // Efecto visual al presionar trigger
+    const line = controller.getObjectByName('line');
+    if (line) {
+        line.material.color.setHex(0xff0000);
+        line.scale.z = 3;
     }
 }
 
-// ==================== RECURSOS ====================
+function onSelectEnd(event) {
+    const controller = event.target;
+    
+    // Restaurar línea
+    const line = controller.getObjectByName('line');
+    if (line) {
+        line.material.color.setHex(0x00ff00);
+        line.scale.z = 5;
+    }
+}
+
+function onSqueezeStart(event) {
+    console.log('🎮 Grip presionado - Movimiento en VR');
+    // El grip se usa para moverte en algunas apps de VR
+}
+
+function onSqueezeEnd(event) {
+    console.log('🎮 Grip liberado');
+}
+
+// ==================== MOVIMIENTO EN VR ====================
+function updateVRMovement() {
+    if (!isInVR || !renderer.xr.isPresenting) return;
+    
+    // Obtener información de los joysticks
+    const session = renderer.xr.getSession();
+    if (!session) return;
+    
+    // Para Meta Quest, el movimiento se maneja con el joystick
+    // Esta función se llamaría en cada frame para actualizar posición
+}
+
+// ==================== JUEGO ====================
+async function initGame() {
+    await loadEnvironment();
+    loadAudio();
+    createMaze();
+    createKeys();
+    createLighting();
+    gameStarted = true;
+    
+    console.log('✅ Juego listo para Meta Quest');
+    console.log('🎯 Usa el trigger para recoger llaves');
+    console.log('🎮 Los controladores deben ser visibles');
+}
+
 async function loadEnvironment() {
     const rgbeLoader = new RGBELoader();
     try {
@@ -431,9 +237,7 @@ async function loadEnvironment() {
         texture.mapping = THREE.EquirectangularReflectionMapping;
         scene.background = texture;
         scene.environment = texture;
-        console.log('✅ HDRI cargado');
     } catch (error) {
-        console.warn('⚠️ Usando color sólido');
         scene.background = new THREE.Color(0x0a0a12);
     }
 }
@@ -441,10 +245,9 @@ async function loadEnvironment() {
 function loadAudio() {
     audioListener = new THREE.AudioListener();
     camera.add(audioListener);
-
+    
     const audioLoader = new THREE.AudioLoader();
     
-    // Sonido ambiental
     audioLoader.load('https://assets.mixkit.co/sfx/preview/mixkit-cold-wind-1151.mp3', (buffer) => {
         windSound = new THREE.Audio(audioListener);
         windSound.setBuffer(buffer);
@@ -453,7 +256,6 @@ function loadAudio() {
         windSound.play();
     });
     
-    // Sonido de victoria
     audioLoader.load('https://assets.mixkit.co/sfx/preview/mixkit-winning-chimes-2015.mp3', (buffer) => {
         victorySound = new THREE.Audio(audioListener);
         victorySound.setBuffer(buffer);
@@ -461,7 +263,6 @@ function loadAudio() {
     });
 }
 
-// ==================== LABERINTO ====================
 function createMaze() {
     const mazeMap = [
         [1,1,1,1,1,1],
@@ -473,9 +274,8 @@ function createMaze() {
     ];
 
     const wallMaterial = new THREE.MeshStandardMaterial({ 
-        color: 0x2a2a3a, 
-        roughness: 0.8,
-        metalness: 0.3
+        color: 0x2a2a3a,
+        roughness: 0.8
     });
 
     for (let z = 0; z < mazeMap.length; z++) {
@@ -494,11 +294,10 @@ function createMaze() {
         }
     }
 
-    // Piso
     const floor = new THREE.Mesh(
         new THREE.PlaneGeometry(30, 30),
         new THREE.MeshStandardMaterial({ 
-            color: 0x151525, 
+            color: 0x151525,
             roughness: 0.9
         })
     );
@@ -508,7 +307,6 @@ function createMaze() {
     scene.add(floor);
 }
 
-// ==================== LLAVES ====================
 function createKeys() {
     const keyPositions = [
         new THREE.Vector3(-2, 1.5, -2),
@@ -529,7 +327,6 @@ function createKeys() {
         key.userData.isKey = true;
         key.userData.collected = false;
         
-        // Luz para la llave
         const keyLight = new THREE.PointLight(0xFFD700, 0.5, 3);
         keyLight.position.copy(key.position);
         scene.add(keyLight);
@@ -539,7 +336,6 @@ function createKeys() {
     }
 }
 
-// ==================== ILUMINACIÓN ====================
 function createLighting() {
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
     scene.add(ambientLight);
@@ -550,70 +346,43 @@ function createLighting() {
     scene.add(directionalLight);
 }
 
-// ==================== INTERACCIÓN ====================
-function onDocumentClick(event) {
-    if (renderer.xr.isPresenting) return;
-    
-    const raycaster = new THREE.Raycaster();
-    const mouse = new THREE.Vector2();
-    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-    
-    raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(keys.filter(k => !k.userData.collected));
-    
-    if (intersects.length > 0) {
-        collectKey(intersects[0].object);
+// ==================== ANIMACIÓN ====================
+function animate() {
+    if (gameStarted) {
+        // Rotar llaves
+        keys.forEach(key => {
+            if (key && !key.userData.collected) {
+                key.rotation.y += 0.02;
+            }
+        });
+        
+        // Actualizar controles si no estamos en VR
+        if (!renderer.xr.isPresenting) {
+            controls.update();
+        }
+        
+        // Actualizar movimiento VR si estamos en VR
+        if (renderer.xr.isPresenting) {
+            updateVRMovement();
+        }
     }
+    
+    renderer.render(scene, camera);
 }
 
+// ==================== INTERACCIÓN ====================
 function collectKey(key) {
     key.userData.collected = true;
     key.visible = false;
     keysCollected++;
     
-    // Partículas de efecto
-    createKeyParticles(key.position);
-    
-    // Actualizar UI
     updateKeyCounter();
     
-    // Verificar victoria
     if (keysCollected >= totalKeys) {
         setTimeout(showVictory, 1000);
     }
-}
-
-function createKeyParticles(position) {
-    for (let i = 0; i < 10; i++) {
-        const geometry = new THREE.SphereGeometry(0.05, 8, 8);
-        const material = new THREE.MeshBasicMaterial({ color: 0xFFD700 });
-        const particle = new THREE.Mesh(geometry, material);
-        
-        particle.position.copy(position);
-        particle.userData.velocity = new THREE.Vector3(
-            (Math.random() - 0.5) * 0.1,
-            Math.random() * 0.1,
-            (Math.random() - 0.5) * 0.1
-        );
-        particle.userData.life = 1.0;
-        
-        scene.add(particle);
-        
-        function animateParticle() {
-            if (particle.userData.life > 0) {
-                particle.position.add(particle.userData.velocity);
-                particle.userData.velocity.y -= 0.005;
-                particle.userData.life -= 0.02;
-                particle.material.opacity = particle.userData.life;
-                requestAnimationFrame(animateParticle);
-            } else {
-                scene.remove(particle);
-            }
-        }
-        
-        animateParticle();
-    }
+    
+    console.log(`🗝️ Llave recogida en VR! Total: ${keysCollected}/${totalKeys}`);
 }
 
 function updateKeyCounter() {
@@ -623,10 +392,8 @@ function updateKeyCounter() {
     }
 }
 
-// ==================== VICTORIA ====================
 function showVictory() {
     if (victorySound) victorySound.play();
-    
     victoryPanel.style.display = 'flex';
     
     // Confeti
@@ -713,18 +480,6 @@ function createParticles() {
     document.head.appendChild(style);
 }
 
-function showError(message) {
-    gameContainer.innerHTML = `
-        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: white; background: rgba(0,0,0,0.8); padding: 30px; border-radius: 10px;">
-            <h2 style="color: #ff4444;">❌ ERROR</h2>
-            <p>${message}</p>
-            <button onclick="location.reload()" style="margin-top: 20px; padding: 10px 20px; background: #00a8ff; border: none; color: white; border-radius: 5px; cursor: pointer;">
-                Recargar
-            </button>
-        </div>
-    `;
-}
-
 // ==================== FUNCIONES UI ====================
 function restartGame() {
     victoryPanel.style.display = 'none';
@@ -758,3 +513,22 @@ function exitVR() {
 
 // ==================== INICIAR ====================
 window.addEventListener('DOMContentLoaded', init);
+
+// Funciones de debug para probar desde consola
+window.debugVR = {
+    showControllers: () => {
+        console.log('Controladores:', { controller1, controller2 });
+    },
+    testTrigger: () => {
+        console.log('Simulando trigger...');
+        if (controller1) {
+            const event = { target: controller1 };
+            onSelectStart(event);
+            setTimeout(() => onSelectEnd(event), 500);
+        }
+    },
+    resetPosition: () => {
+        camera.position.set(0, 1.6, 5);
+        console.log('Posición reiniciada');
+    }
+};
