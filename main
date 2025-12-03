@@ -1,0 +1,870 @@
+import * as THREE from 'three';
+import { VRButton } from 'three/addons/webxr/VRButton.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+// Variables globales
+let scene, camera, renderer, controls;
+let keys = [];
+let keysCollected = 0;
+const totalKeys = 3;
+let audioListener, windSound, victorySound;
+let gameStarted = false;
+
+// Elementos DOM
+let startScreen, gameContainer, startButton;
+let keyCounter, victoryPanel, restartButton, backToMenuButton, exitVRButton;
+
+// Variables para movimiento
+let moveForward = false;
+let moveBackward = false;
+let moveLeft = false;
+let moveRight = false;
+const moveSpeed = 0.1;
+
+// Variables para depuración
+let frameCount = 0;
+let lastTime = performance.now();
+let fps = 0;
+let debugPanel;
+
+// Variables para controllers VR
+let controller1, controller2;
+let teleportRing;
+
+// Inicialización
+async function init() {
+    console.log('🚀 Inicializando juego...');
+    
+    // Configurar elementos DOM
+    startScreen = document.getElementById('start-screen');
+    gameContainer = document.getElementById('game-container');
+    startButton = document.getElementById('start-button');
+    keyCounter = document.getElementById('key-counter');
+    victoryPanel = document.getElementById('victory-panel');
+    restartButton = document.getElementById('restart-button');
+    backToMenuButton = document.getElementById('back-to-menu');
+    exitVRButton = document.getElementById('exit-vr-button');
+    
+    // Event listeners
+    startButton.addEventListener('click', startGame);
+    restartButton.addEventListener('click', restartGame);
+    backToMenuButton.addEventListener('click', backToMenu);
+    exitVRButton.addEventListener('click', exitVR);
+    
+    // Inicializar contador de llaves
+    updateKeyCounter();
+    
+    // Crear partículas para el fondo
+    createParticles();
+    
+    // Crear panel de depuración
+    createDebugPanel();
+    
+    console.log('✅ Interfaz inicializada');
+}
+
+function startGame() {
+    console.log('🎮 Iniciando juego...');
+    
+    // Animación de salida de la pantalla de inicio
+    startScreen.style.opacity = '0';
+    startScreen.style.transition = 'opacity 0.8s ease';
+    
+    setTimeout(() => {
+        startScreen.style.display = 'none';
+        gameContainer.style.display = 'block';
+        
+        // Inicializar Three.js
+        initThreeJS();
+        initMovementControls();  // IMPORTANTE: Inicializar controles de movimiento
+        initGame();
+    }, 800);
+}
+
+function initThreeJS() {
+    console.log('🖥️ Inicializando Three.js...');
+    
+    // 1. Escena
+    scene = new THREE.Scene();
+    scene.fog = new THREE.Fog(0x0a0a12, 10, 50);
+
+    // 2. Cámara
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 1.6, 5);
+
+    // 3. Renderer
+    renderer = new THREE.WebGLRenderer({ 
+        antialias: true,
+        alpha: true
+    });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.xr.enabled = true;
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
+    
+    // Insertar canvas en el contenedor del juego
+    gameContainer.appendChild(renderer.domElement);
+
+    // 4. Controles (para modo no-VR)
+    controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 1.6, 0);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.update();
+
+    // 5. Botón VR
+    const vrButton = VRButton.createButton(renderer);
+    vrButton.classList.add('custom-vr-button');
+    document.body.appendChild(vrButton);
+
+    // 6. Configurar controles VR
+    setupVRControllers();
+    
+    // 7. Configurar teleportación para VR
+    setupTeleportation();
+
+    // 8. Eventos
+    window.addEventListener('resize', onWindowResize);
+    renderer.domElement.addEventListener('click', onDocumentClick);
+    
+    // 9. Iniciar loop
+    renderer.setAnimationLoop(animate);
+    
+    console.log('✅ Three.js inicializado');
+}
+
+function initMovementControls() {
+    console.log('🎮 Configurando controles de movimiento...');
+    
+    document.addEventListener('keydown', (event) => {
+        switch (event.code) {
+            case 'KeyW':
+            case 'ArrowUp':
+                moveForward = true;
+                break;
+            case 'KeyS':
+            case 'ArrowDown':
+                moveBackward = true;
+                break;
+            case 'KeyA':
+            case 'ArrowLeft':
+                moveLeft = true;
+                break;
+            case 'KeyD':
+            case 'ArrowRight':
+                moveRight = true;
+                break;
+            case 'Space':
+                // Saltar (solo en modo escritorio)
+                if (!renderer.xr.isPresenting && camera.position.y <= 1.6) {
+                    camera.position.y += 0.5;
+                }
+                break;
+        }
+    });
+
+    document.addEventListener('keyup', (event) => {
+        switch (event.code) {
+            case 'KeyW':
+            case 'ArrowUp':
+                moveForward = false;
+                break;
+            case 'KeyS':
+            case 'ArrowDown':
+                moveBackward = false;
+                break;
+            case 'KeyA':
+            case 'ArrowLeft':
+                moveLeft = false;
+                break;
+            case 'KeyD':
+            case 'ArrowRight':
+                moveRight = false;
+                break;
+        }
+    });
+    
+    console.log('✅ Controles de movimiento configurados (WASD/Flechas)');
+}
+
+function updateMovement() {
+    // Solo aplicar movimiento en modo escritorio (no VR)
+    if (!renderer.xr.isPresenting) {
+        if (moveForward) {
+            camera.position.x -= Math.sin(camera.rotation.y) * moveSpeed;
+            camera.position.z -= Math.cos(camera.rotation.y) * moveSpeed;
+        }
+        if (moveBackward) {
+            camera.position.x += Math.sin(camera.rotation.y) * moveSpeed;
+            camera.position.z += Math.cos(camera.rotation.y) * moveSpeed;
+        }
+        if (moveLeft) {
+            camera.position.x -= Math.cos(camera.rotation.y) * moveSpeed;
+            camera.position.z += Math.sin(camera.rotation.y) * moveSpeed;
+        }
+        if (moveRight) {
+            camera.position.x += Math.cos(camera.rotation.y) * moveSpeed;
+            camera.position.z -= Math.sin(camera.rotation.y) * moveSpeed;
+        }
+        
+        // Gravedad simple
+        if (camera.position.y > 1.6) {
+            camera.position.y -= 0.05;
+        }
+    }
+}
+
+async function initGame() {
+    console.log('🎮 Inicializando juego...');
+    await loadEnvironment();
+    loadAudio();
+    createMaze();
+    createKeys();
+    createLighting();
+    gameStarted = true;
+    console.log('✅ Juego inicializado');
+}
+
+function onWindowResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function animate() {
+    if (gameStarted) {
+        // Rotar llaves
+        keys.forEach(key => {
+            if (key && !key.userData.collected) {
+                key.rotation.y += 0.02;
+            }
+        });
+        
+        // Actualizar controles y movimiento
+        if (!renderer.xr.isPresenting) {
+            controls.update();
+            updateMovement();
+        }
+        
+        // Actualizar información de depuración
+        updateDebugInfo();
+    }
+    renderer.render(scene, camera);
+}
+
+// Función para configurar controles VR
+function setupVRControllers() {
+    console.log('🎮 Configurando controles VR...');
+    
+    controller1 = renderer.xr.getController(0);
+    controller2 = renderer.xr.getController(1);
+    
+    // Añadir visualización de controllers
+    const controllerModel = (controller) => {
+        const geometry = new THREE.BoxGeometry(0.05, 0.05, 0.15);
+        const material = new THREE.MeshBasicMaterial({ color: 0x00a8ff });
+        const mesh = new THREE.Mesh(geometry, material);
+        controller.add(mesh);
+    };
+    
+    if (controller1) {
+        controllerModel(controller1);
+        scene.add(controller1);
+        
+        // Detectar eventos de trigger para recoger llaves en VR
+        controller1.addEventListener('selectstart', () => {
+            console.log('🎮 Trigger presionado en VR');
+            onVRSelect();
+        });
+    }
+    
+    if (controller2) {
+        controllerModel(controller2);
+        scene.add(controller2);
+    }
+    
+    console.log('✅ Controles VR configurados');
+}
+
+function setupTeleportation() {
+    console.log('📍 Configurando sistema de teleportación...');
+    
+    // Crear anillo de teleportación
+    const geometry = new THREE.RingGeometry(0.1, 0.2, 32);
+    const material = new THREE.MeshBasicMaterial({ 
+        color: 0x00ff00, 
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.5 
+    });
+    teleportRing = new THREE.Mesh(geometry, material);
+    teleportRing.visible = false;
+    teleportRing.rotation.x = -Math.PI / 2; // Rotar para que quede horizontal
+    scene.add(teleportRing);
+    
+    console.log('✅ Sistema de teleportación configurado');
+}
+
+function onVRSelect() {
+    if (!controller1) return;
+    
+    // Lanzar rayo desde el controller
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(new THREE.Vector2(0, 0), controller1);
+    
+    // Primero verificar si intersecta con llaves
+    const keyIntersects = raycaster.intersectObjects(keys.filter(k => !k.userData.collected));
+    
+    if (keyIntersects.length > 0) {
+        // Recoger llave
+        collectKey(keyIntersects[0].object);
+        return;
+    }
+    
+    // Si no intersecta con llaves, verificar teleportación
+    const floorIntersects = raycaster.intersectObjects(scene.children.filter(obj => 
+        obj.name === 'floor' || (obj.geometry && obj.geometry.type === 'PlaneGeometry')
+    ));
+    
+    if (floorIntersects.length > 0) {
+        // Mostrar anillo de teleportación
+        teleportRing.position.copy(floorIntersects[0].point);
+        teleportRing.position.y += 0.01; // Levantar un poco para evitar z-fighting
+        teleportRing.visible = true;
+        
+        // Teleportar después de un breve delay
+        setTimeout(() => {
+            if (teleportRing.visible) {
+                camera.position.x = teleportRing.position.x;
+                camera.position.z = teleportRing.position.z;
+                teleportRing.visible = false;
+                console.log('📍 Teletransportado a:', teleportRing.position);
+            }
+        }, 300);
+    }
+}
+
+// Funciones de carga de recursos
+async function loadEnvironment() {
+    const rgbeLoader = new RGBELoader();
+    try {
+        console.log('🌄 Cargando HDRI...');
+        const texture = await rgbeLoader.loadAsync('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/4k/kloofendal_48d_partly_cloudy_puresky_4k.hdr');
+        texture.mapping = THREE.EquirectangularReflectionMapping;
+        scene.background = texture;
+        scene.environment = texture;
+        console.log('✅ HDRI cargado');
+    } catch (error) {
+        console.warn('⚠️ No se pudo cargar HDRI, usando color sólido');
+        scene.background = new THREE.Color(0x0a0a12);
+    }
+}
+
+function loadAudio() {
+    console.log('🔊 Cargando audio...');
+    audioListener = new THREE.AudioListener();
+    camera.add(audioListener);
+
+    // Sonido ambiental de viento
+    const audioLoader = new THREE.AudioLoader();
+    
+    // Usar audio local si existe, sino usar URL externa
+    const windAudioURL = 'assets/audio/wind.mp3' || 'https://assets.mixkit.co/sfx/preview/mixkit-cold-wind-1151.mp3';
+    const victoryAudioURL = 'assets/audio/victory.mp3' || 'https://assets.mixkit.co/sfx/preview/mixkit-winning-chimes-2015.mp3';
+    
+    audioLoader.load(windAudioURL, (buffer) => {
+        windSound = new THREE.Audio(audioListener);
+        windSound.setBuffer(buffer);
+        windSound.setLoop(true);
+        windSound.setVolume(0.2);
+        windSound.play();
+        console.log('✅ Sonido ambiental cargado');
+    }, undefined, (error) => {
+        console.warn('⚠️ No se pudo cargar sonido de viento:', error);
+    });
+
+    // Sonido de victoria
+    audioLoader.load(victoryAudioURL, (buffer) => {
+        victorySound = new THREE.Audio(audioListener);
+        victorySound.setBuffer(buffer);
+        victorySound.setVolume(0.7);
+        console.log('✅ Sonido de victoria cargado');
+    }, undefined, (error) => {
+        console.warn('⚠️ No se pudo cargar sonido de victoria:', error);
+    });
+}
+
+function createMaze() {
+    console.log('🧱 Creando laberinto...');
+    const mazeMap = [
+        [1,1,1,1,1,1],
+        [1,0,0,0,0,1],
+        [1,0,1,1,0,1],
+        [1,0,0,1,0,1],
+        [1,1,0,0,0,1],
+        [1,1,1,1,1,1]
+    ];
+
+    const wallMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0x2a2a3a, 
+        roughness: 0.8,
+        metalness: 0.3,
+        emissive: 0x0a0a1a,
+        emissiveIntensity: 0.1
+    });
+
+    for (let z = 0; z < mazeMap.length; z++) {
+        for (let x = 0; x < mazeMap[0].length; x++) {
+            if (mazeMap[z][x] === 1) {
+                const wall = new THREE.Mesh(
+                    new THREE.BoxGeometry(2, 2, 2),
+                    wallMaterial
+                );
+                wall.position.set(x * 2 - 5, 1, z * 2 - 5);
+                wall.castShadow = true;
+                wall.receiveShadow = true;
+                wall.name = 'wall';
+                
+                // Añadir efecto de borde brillante
+                const edges = new THREE.EdgesGeometry(wall.geometry);
+                const line = new THREE.LineSegments(edges, 
+                    new THREE.LineBasicMaterial({ 
+                        color: 0x00a8ff, 
+                        transparent: true,
+                        opacity: 0.3 
+                    })
+                );
+                line.position.copy(wall.position);
+                scene.add(line);
+                scene.add(wall);
+            }
+        }
+    }
+
+    // Piso (para teleportación)
+    const floor = new THREE.Mesh(
+        new THREE.PlaneGeometry(30, 30),
+        new THREE.MeshStandardMaterial({ 
+            color: 0x151525, 
+            roughness: 0.9,
+            metalness: 0.1
+        })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    floor.name = 'floor';
+    scene.add(floor);
+    
+    console.log('✅ Laberinto creado');
+}
+
+async function createKeys() {
+    console.log('🗝️ Creando llaves...');
+    const keyPositions = [
+        new THREE.Vector3(-2, 1.5, -2),
+        new THREE.Vector3(3, 1.5, 0),
+        new THREE.Vector3(0, 1.5, 3)
+    ];
+
+    for (let i = 0; i < totalKeys; i++) {
+        try {
+            // Usar un modelo simple de esfera como llave
+            const keyGeometry = new THREE.SphereGeometry(0.2, 16, 16);
+            const keyMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0xFFD700,
+                emissive: 0xFFAA00,
+                emissiveIntensity: 0.5,
+                metalness: 0.8,
+                roughness: 0.2
+            });
+            const key = new THREE.Mesh(keyGeometry, keyMaterial);
+            key.position.copy(keyPositions[i]);
+            key.userData.isKey = true;
+            key.userData.collected = false;
+            key.name = `key_${i}`;
+            
+            // Añadir punto de luz
+            const keyLight = new THREE.PointLight(0xFFD700, 0.5, 3);
+            keyLight.position.copy(key.position);
+            scene.add(keyLight);
+            
+            scene.add(key);
+            keys.push(key);
+            
+            console.log(`✅ Llave ${i+1} creada en posición:`, keyPositions[i]);
+        } catch (error) {
+            console.error('❌ Error creando llave:', error);
+        }
+    }
+    console.log('✅ Todas las llaves creadas');
+}
+
+function onDocumentClick(event) {
+    // Para modo escritorio: click con mouse para recoger llaves
+    if (renderer.xr.isPresenting) return;
+    
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+    
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObjects(keys.filter(k => !k.userData.collected));
+    
+    if (intersects.length > 0) {
+        collectKey(intersects[0].object);
+    }
+}
+
+function collectKey(key) {
+    if (key.userData.collected) return;
+    
+    key.userData.collected = true;
+    key.visible = false;
+    keysCollected++;
+    
+    // Efecto visual de recolección
+    const particles = createKeyParticles(key.position);
+    
+    // Actualizar UI
+    updateKeyCounter();
+    
+    // Verificar victoria
+    if (keysCollected >= totalKeys) {
+        setTimeout(() => {
+            showVictory();
+        }, 1000);
+    }
+    
+    console.log(`🗝️ Llave recogida! Total: ${keysCollected}/${totalKeys}`);
+}
+
+function createKeyParticles(position) {
+    const particleCount = 10;
+    const particles = [];
+    
+    for (let i = 0; i < particleCount; i++) {
+        const geometry = new THREE.SphereGeometry(0.05, 8, 8);
+        const material = new THREE.MeshBasicMaterial({ color: 0xFFD700 });
+        const particle = new THREE.Mesh(geometry, material);
+        
+        particle.position.copy(position);
+        
+        // Velocidad aleatoria
+        particle.userData.velocity = new THREE.Vector3(
+            (Math.random() - 0.5) * 0.1,
+            Math.random() * 0.1,
+            (Math.random() - 0.5) * 0.1
+        );
+        
+        particle.userData.life = 1.0;
+        particles.push(particle);
+        scene.add(particle);
+    }
+    
+    // Animar partículas
+    function animateParticles() {
+        let aliveParticles = 0;
+        
+        particles.forEach(particle => {
+            if (particle.userData.life > 0) {
+                particle.position.add(particle.userData.velocity);
+                particle.userData.velocity.y -= 0.005; // Gravedad
+                particle.userData.life -= 0.02;
+                particle.material.opacity = particle.userData.life;
+                aliveParticles++;
+            }
+        });
+        
+        if (aliveParticles > 0) {
+            requestAnimationFrame(animateParticles);
+        } else {
+            // Remover partículas
+            particles.forEach(particle => {
+                scene.remove(particle);
+            });
+        }
+    }
+    
+    animateParticles();
+    return particles;
+}
+
+function updateKeyCounter() {
+    const counterValue = document.querySelector('.counter-value');
+    if (counterValue) {
+        counterValue.textContent = `${keysCollected}/${totalKeys}`;
+    }
+}
+
+function createLighting() {
+    console.log('💡 Creando iluminación...');
+    
+    // Luz ambiental
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+    scene.add(ambientLight);
+
+    // Luz direccional (sol)
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    directionalLight.position.set(10, 20, 5);
+    directionalLight.castShadow = true;
+    directionalLight.shadow.mapSize.width = 2048;
+    directionalLight.shadow.mapSize.height = 2048;
+    directionalLight.shadow.camera.near = 0.5;
+    directionalLight.shadow.camera.far = 50;
+    directionalLight.shadow.camera.left = -20;
+    directionalLight.shadow.camera.right = 20;
+    directionalLight.shadow.camera.top = 20;
+    directionalLight.shadow.camera.bottom = -20;
+    scene.add(directionalLight);
+
+    // Luces puntuales decorativas
+    const lightColors = [0x00a8ff, 0x00fff7, 0xff00ff];
+    lightColors.forEach((color, i) => {
+        const light = new THREE.PointLight(color, 0.5, 15);
+        light.position.set((i - 1) * 4, 3, -5);
+        scene.add(light);
+        
+        // Añadir helper visual para las luces
+        const lightSphere = new THREE.Mesh(
+            new THREE.SphereGeometry(0.1, 8, 8),
+            new THREE.MeshBasicMaterial({ color: color })
+        );
+        lightSphere.position.copy(light.position);
+        scene.add(lightSphere);
+    });
+    
+    console.log('✅ Iluminación creada');
+}
+
+function showVictory() {
+    console.log('🎉 ¡VICTORIA! Mostrando pantalla de victoria');
+    
+    // Sonido
+    if (victorySound) {
+        victorySound.stop();
+        victorySound.play();
+    }
+    
+    // Mostrar panel de victoria
+    victoryPanel.style.display = 'flex';
+    
+    // Crear confeti
+    createConfetti3D();
+}
+
+function createConfetti3D() {
+    const confettiCount = 100;
+    const colors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xff00ff, 0x00ffff];
+    
+    for (let i = 0; i < confettiCount; i++) {
+        const geometry = new THREE.PlaneGeometry(0.1, 0.1);
+        const material = new THREE.MeshBasicMaterial({
+            color: colors[Math.floor(Math.random() * colors.length)],
+            side: THREE.DoubleSide
+        });
+        const confetti = new THREE.Mesh(geometry, material);
+        
+        confetti.position.set(
+            (Math.random() - 0.5) * 10,
+            Math.random() * 5 + 5,
+            (Math.random() - 0.5) * 10
+        );
+        
+        confetti.rotation.set(
+            Math.random() * Math.PI,
+            Math.random() * Math.PI,
+            Math.random() * Math.PI
+        );
+        
+        scene.add(confetti);
+        
+        // Animación
+        animateConfetti(confetti);
+    }
+}
+
+function animateConfetti(confetti) {
+    const speed = 0.02 + Math.random() * 0.03;
+    const rotationSpeed = (Math.random() - 0.5) * 0.1;
+    
+    function update() {
+        confetti.position.y -= speed;
+        confetti.rotation.x += rotationSpeed;
+        confetti.rotation.z += rotationSpeed;
+        
+        if (confetti.position.y > -5) {
+            requestAnimationFrame(update);
+        } else {
+            scene.remove(confetti);
+        }
+    }
+    
+    update();
+}
+
+function createParticles() {
+    const particlesContainer = document.querySelector('.particles-container');
+    const particleCount = 50;
+    
+    for (let i = 0; i < particleCount; i++) {
+        const particle = document.createElement('div');
+        particle.classList.add('particle');
+        particle.style.cssText = `
+            position: absolute;
+            width: ${Math.random() * 4 + 1}px;
+            height: ${Math.random() * 4 + 1}px;
+            background: rgba(0, 168, 255, ${Math.random() * 0.5 + 0.1});
+            border-radius: 50%;
+            left: ${Math.random() * 100}%;
+            top: ${Math.random() * 100}%;
+            animation: float ${Math.random() * 10 + 5}s infinite linear;
+        `;
+        particlesContainer.appendChild(particle);
+    }
+    
+    // Añadir estilo de animación
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes float {
+            0% { transform: translateY(0) translateX(0); opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { transform: translateY(-100vh) translateX(${Math.random() * 100 - 50}px); opacity: 0; }
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+// ===== SISTEMA DE DEPURACIÓN =====
+function createDebugPanel() {
+    debugPanel = document.createElement('div');
+    debugPanel.id = 'debug-panel';
+    debugPanel.style.cssText = `
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        background: rgba(0,0,0,0.8);
+        color: #0f0;
+        padding: 15px;
+        border-radius: 5px;
+        font-family: monospace;
+        font-size: 12px;
+        z-index: 10000;
+        max-width: 300px;
+        border: 1px solid #0f0;
+        backdrop-filter: blur(5px);
+    `;
+    
+    debugPanel.innerHTML = `
+        <div style="margin-bottom: 10px; font-weight: bold; color: #0ff;">🛠️ PANEL DE DEPURACIÓN</div>
+        <div><strong>Estado VR:</strong> <span id="debug-status">No iniciado</span></div>
+        <div><strong>FPS:</strong> <span id="debug-fps">--</span></div>
+        <div><strong>Posición:</strong> <span id="debug-position">(0.0, 1.6, 5.0)</span></div>
+        <div><strong>Llaves:</strong> <span id="debug-keys">0/3</span></div>
+        <div><strong>WebXR:</strong> <span id="debug-xr">Inactivo</span></div>
+        <div><strong>Controllers:</strong> <span id="debug-controllers">--</span></div>
+        <div style="margin-top: 10px; font-size: 10px; color: #aaa;">
+            Modo escritorio: WASD para mover, click para recoger<br>
+            VR: Trigger para recoger/teleportar
+        </div>
+    `;
+    
+    document.body.appendChild(debugPanel);
+    console.log('✅ Panel de depuración creado');
+}
+
+function updateDebugInfo() {
+    frameCount++;
+    const currentTime = performance.now();
+    
+    if (currentTime >= lastTime + 1000) {
+        fps = Math.round((frameCount * 1000) / (currentTime - lastTime));
+        frameCount = 0;
+        lastTime = currentTime;
+        
+        // Actualizar información
+        if (document.getElementById('debug-fps')) {
+            document.getElementById('debug-fps').textContent = `${fps}`;
+            document.getElementById('debug-position').textContent = 
+                `(${camera.position.x.toFixed(1)}, ${camera.position.y.toFixed(1)}, ${camera.position.z.toFixed(1)})`;
+            document.getElementById('debug-keys').textContent = `${keysCollected}/${totalKeys}`;
+            document.getElementById('debug-xr').textContent = 
+                renderer.xr.isPresenting ? '✅ ACTIVO' : '❌ INACTIVO';
+            
+            if (renderer.xr.isPresenting) {
+                const session = renderer.xr.getSession();
+                const controllers = session.inputSources ? session.inputSources.length : 0;
+                document.getElementById('debug-controllers').textContent = `${controllers}`;
+                document.getElementById('debug-status').textContent = '🎮 VR ACTIVO';
+                document.getElementById('debug-status').style.color = '#0f0';
+            } else {
+                document.getElementById('debug-controllers').textContent = '--';
+                document.getElementById('debug-status').textContent = '🖥️ MODO ESCRITORIO';
+                document.getElementById('debug-status').style.color = '#ff0';
+            }
+        }
+    }
+}
+
+// ===== FUNCIONES DE UI =====
+function restartGame() {
+    console.log('🔄 Reiniciando juego...');
+    
+    // Ocultar panel de victoria
+    victoryPanel.style.display = 'none';
+    
+    // Reiniciar variables
+    keysCollected = 0;
+    updateKeyCounter();
+    
+    // Reiniciar llaves
+    keys.forEach(key => {
+        key.userData.collected = false;
+        key.visible = true;
+    });
+    
+    // Resetear posición de la cámara
+    camera.position.set(0, 1.6, 5);
+    camera.rotation.set(0, 0, 0);
+    
+    console.log('✅ Juego reiniciado');
+}
+
+function backToMenu() {
+    console.log('🏠 Volviendo al menú...');
+    
+    // Ocultar juego
+    gameContainer.style.display = 'none';
+    
+    // Mostrar pantalla de inicio
+    startScreen.style.display = 'flex';
+    startScreen.style.opacity = '1';
+    
+    // Detener sonidos
+    if (windSound) windSound.stop();
+    
+    // Reiniciar juego
+    restartGame();
+    
+    // Salir de VR si estamos en VR
+    exitVR();
+    
+    console.log('✅ Volvió al menú principal');
+}
+
+function exitVR() {
+    if (renderer && renderer.xr && renderer.xr.isPresenting) {
+        renderer.xr.getSession().end();
+        console.log('🚪 Saliendo de VR');
+    }
+}
+
+// Inicializar cuando se cargue la página
+window.addEventListener('DOMContentLoaded', init);
