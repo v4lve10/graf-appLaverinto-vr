@@ -4,11 +4,11 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
 
-// Variables globales - MODIFICADO: más llaves
+// Variables globales
 let scene, camera, renderer, controls;
 let keys = [];
 let keysCollected = 0;
-const totalKeys = 8; // AUMENTADO de 3 a 8
+const totalKeys = 8; // 8 llaves como solicitaste
 let audioListener, windSound, victorySound;
 let gameStarted = false;
 
@@ -26,8 +26,7 @@ let controllerModelFactory;
 let isInVR = false;
 
 // Variables para movimiento VR
-let vrMovementVector = new THREE.Vector3();
-const vrMoveSpeed = 0.05;
+const vrMoveSpeed = 0.08; // Aumentado para laberinto grande
 
 // Elementos DOM
 let startScreen, gameContainer, startButton;
@@ -47,19 +46,27 @@ async function init() {
     backToMenuButton = document.getElementById('back-to-menu');
     exitVRButton = document.getElementById('exit-vr-button');
     
+    // Actualizar texto para 8 llaves
+    const counterValue = document.querySelector('.counter-value');
+    if (counterValue) counterValue.textContent = `0/${totalKeys}`;
+    
+    // Actualizar especificaciones
+    const specValue = document.querySelector('.spec-value:last-child');
+    if (specValue) specValue.textContent = `${totalKeys} Llaves Digitales`;
+    
+    const dimensionSpec = document.querySelector('.spec-value:nth-child(2)');
+    if (dimensionSpec) dimensionSpec.textContent = '15x15 Laberinto Gigante';
+    
     // Event listeners
     startButton.addEventListener('click', startGame);
     restartButton.addEventListener('click', restartGame);
     backToMenuButton.addEventListener('click', backToMenu);
     exitVRButton.addEventListener('click', exitVR);
     
-    // Inicializar contador
-    updateKeyCounter();
-    
     // Crear partículas para el fondo
     createParticles();
     
-    console.log('✅ Interfaz inicializada');
+    console.log('✅ Interfaz inicializada para Meta Quest 3');
 }
 
 function startGame() {
@@ -91,23 +98,21 @@ function initThreeJS() {
     scene = new THREE.Scene();
     scene.fog = new THREE.Fog(0x0a0a12, 10, 100);
 
-    // 2. Cámara - Ajustada para laberinto más grande
+    // 2. Cámara
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     camera.position.set(0, 1.6, 5);
 
-    // 3. Renderer
+    // 3. Renderer optimizado para Quest 3
     renderer = new THREE.WebGLRenderer({ 
         antialias: true,
-        alpha: true
+        alpha: true,
+        powerPreference: 'high-performance'
     });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); // Limitar para mejor performance en Quest
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.xr.enabled = true;
-    renderer.outputEncoding = THREE.sRGBEncoding;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.0;
     
     // Insertar canvas
     gameContainer.appendChild(renderer.domElement);
@@ -119,12 +124,19 @@ function initThreeJS() {
     controls.dampingFactor = 0.05;
     controls.update();
 
-    // 5. Botón VR
+    // 5. Botón VR personalizado
     const vrButton = VRButton.createButton(renderer);
+    vrButton.innerHTML = '🎮 ACTIVAR VR - META QUEST 3';
     vrButton.classList.add('custom-vr-button');
+    vrButton.style.cssText = `
+        background: linear-gradient(90deg, #00a8ff, #00fff7) !important;
+        font-family: 'Orbitron', sans-serif !important;
+        font-weight: 600 !important;
+        letter-spacing: 1px !important;
+    `;
     document.body.appendChild(vrButton);
 
-    // 6. Configurar controles VR
+    // 6. Configurar controles VR específicos para Quest 3
     setupVRControllers();
 
     // 7. Eventos
@@ -133,109 +145,30 @@ function initThreeJS() {
     
     // 8. Detectar inicio/fin de VR
     renderer.xr.addEventListener('sessionstart', () => {
-        console.log('🚀 Sesión VR iniciada');
+        console.log('🚀 Sesión VR META QUEST 3 iniciada');
         isInVR = true;
+        showVRControlsInfo();
     });
     
     renderer.xr.addEventListener('sessionend', () => {
         console.log('👋 Sesión VR finalizada');
         isInVR = false;
+        hideVRControlsInfo();
     });
     
     // 9. Iniciar loop
     renderer.setAnimationLoop(animate);
     
-    console.log('✅ Three.js inicializado');
+    console.log('✅ Three.js inicializado para Meta Quest 3');
 }
 
-function initMovementControls() {
-    console.log('🎮 Configurando controles de movimiento...');
-    
-    // Teclado
-    document.addEventListener('keydown', (event) => {
-        switch (event.code) {
-            case 'KeyW':
-            case 'ArrowUp':
-                moveForward = true;
-                break;
-            case 'KeyS':
-            case 'ArrowDown':
-                moveBackward = true;
-                break;
-            case 'KeyA':
-            case 'ArrowLeft':
-                moveLeft = true;
-                break;
-            case 'KeyD':
-            case 'ArrowRight':
-                moveRight = true;
-                break;
-            case 'Space':
-                if (!isInVR && camera.position.y <= 1.6) {
-                    camera.position.y += 0.5;
-                }
-                break;
-        }
-    });
-
-    document.addEventListener('keyup', (event) => {
-        switch (event.code) {
-            case 'KeyW':
-            case 'ArrowUp':
-                moveForward = false;
-                break;
-            case 'KeyS':
-            case 'ArrowDown':
-                moveBackward = false;
-                break;
-            case 'KeyA':
-            case 'ArrowLeft':
-                moveLeft = false;
-                break;
-            case 'KeyD':
-            case 'ArrowRight':
-                moveRight = false;
-                break;
-        }
-    });
-    
-    console.log('✅ Controles de teclado configurados (WASD/Flechas)');
-}
-
-function updateMovement() {
-    // Solo en modo escritorio
-    if (!isInVR) {
-        if (moveForward) {
-            camera.position.x -= Math.sin(camera.rotation.y) * moveSpeed;
-            camera.position.z -= Math.cos(camera.rotation.y) * moveSpeed;
-        }
-        if (moveBackward) {
-            camera.position.x += Math.sin(camera.rotation.y) * moveSpeed;
-            camera.position.z += Math.cos(camera.rotation.y) * moveSpeed;
-        }
-        if (moveLeft) {
-            camera.position.x -= Math.cos(camera.rotation.y) * moveSpeed;
-            camera.position.z += Math.sin(camera.rotation.y) * moveSpeed;
-        }
-        if (moveRight) {
-            camera.position.x += Math.cos(camera.rotation.y) * moveSpeed;
-            camera.position.z -= Math.sin(camera.rotation.y) * moveSpeed;
-        }
-        
-        // Gravedad simple
-        if (camera.position.y > 1.6) {
-            camera.position.y -= 0.05;
-        }
-    }
-}
-
-// ==================== CONTROLES VR ====================
+// ==================== MAPEO ESPECÍFICO META QUEST 3 ====================
 function setupVRControllers() {
-    console.log('🎮 Configurando controles VR...');
+    console.log('🎮 Configurando controles META QUEST 3...');
     
     controllerModelFactory = new XRControllerModelFactory();
     
-    // Controlador 1
+    // Controlador izquierdo
     controller1 = renderer.xr.getController(0);
     controller1.addEventListener('selectstart', onVRSelectStart);
     controller1.addEventListener('selectend', onVRSelectEnd);
@@ -243,23 +176,23 @@ function setupVRControllers() {
     controller1.addEventListener('squeezeend', onVRSqueezeEnd);
     scene.add(controller1);
     
-    // Modelo del controlador 1
+    // Modelo del controlador izquierdo
     controllerGrip1 = renderer.xr.getControllerGrip(0);
     controllerGrip1.add(controllerModelFactory.createControllerModel(controllerGrip1));
     scene.add(controllerGrip1);
     
-    // Controlador 2
+    // Controlador derecho
     controller2 = renderer.xr.getController(1);
     controller2.addEventListener('selectstart', onVRSelectStart);
     controller2.addEventListener('selectend', onVRSelectEnd);
     scene.add(controller2);
     
-    // Modelo del controlador 2
+    // Modelo del controlador derecho
     controllerGrip2 = renderer.xr.getControllerGrip(1);
     controllerGrip2.add(controllerModelFactory.createControllerModel(controllerGrip2));
     scene.add(controllerGrip2);
     
-    // Rayo para apuntar
+    // Rayo para apuntar (solo controlador derecho para interacción)
     const geometry = new THREE.BufferGeometry().setFromPoints([
         new THREE.Vector3(0, 0, 0),
         new THREE.Vector3(0, 0, -1)
@@ -267,20 +200,154 @@ function setupVRControllers() {
     
     const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ 
         color: 0x00ff00, 
-        linewidth: 2,
+        linewidth: 3,
         transparent: true,
-        opacity: 0.5
+        opacity: 0.7
     }));
     line.name = 'pointer';
-    line.scale.z = 3;
+    line.scale.z = 4; // Rayo más largo
     
-    controller1.add(line.clone());
+    // Solo en controlador derecho para interacción
     controller2.add(line.clone());
     
-    console.log('✅ Controles VR configurados');
+    // En controlador izquierdo solo para referencia (más tenue)
+    const leftLine = line.clone();
+    leftLine.material.opacity = 0.3;
+    controller1.add(leftLine);
+    
+    console.log('✅ Controles META QUEST 3 configurados');
+    console.log('🎮 Mapeo Meta Quest 3:');
+    console.log('   • Joystick Izquierdo: Movimiento');
+    console.log('   • Trigger (Gatillo): Recoger llaves');
+    console.log('   • Botón A/X: Movimiento adelante');
+    console.log('   • Botón B/Y: Movimiento atrás');
+    console.log('   • Grip: Teleport/Modo especial');
 }
 
-// ==================== EVENTOS VR ====================
+// ==================== MOVIMIENTO VR META QUEST 3 ====================
+function updateVRMovement() {
+    if (!isInVR || !renderer.xr.isPresenting) return;
+    
+    const session = renderer.xr.getSession();
+    if (!session || !session.inputSources) return;
+    
+    // Revisar ambos controladores
+    for (let i = 0; i < Math.min(2, session.inputSources.length); i++) {
+        const inputSource = session.inputSources[i];
+        if (inputSource && inputSource.gamepad) {
+            const gamepad = inputSource.gamepad;
+            
+            // 🔧 MAPEO META QUEST 3:
+            // Ejes 0-1: Joystick derecho (rotación/mira)
+            // Ejes 2-3: Joystick izquierdo (MOVIMIENTO) <- ESTE ES EL IMPORTANTE
+            // Botón 0: A/X (izquierdo), Botón 1: B/Y (izquierdo)
+            // Botón 2: Grip (izquierdo), Botón 3: Menu/System
+            // Botón 4: A/X (derecho), Botón 5: B/Y (derecho)
+            // Botón 6: Grip (derecho)
+            
+            if (gamepad.axes && gamepad.axes.length >= 4) {
+                // 🎮 JOYSTICK IZQUIERDO PARA MOVIMIENTO (ejes 2 y 3)
+                let joystickX = 0;
+                let joystickY = 0;
+                
+                // Intentar diferentes configuraciones
+                if (gamepad.axes.length >= 4) {
+                    // Meta Quest 3 usa ejes 2 y 3 para joystick izquierdo
+                    joystickX = gamepad.axes[2] || 0;
+                    joystickY = gamepad.axes[3] || 0;
+                    
+                    // Si no hay movimiento en 2-3, probar con 0-1
+                    if (Math.abs(joystickX) < 0.1 && Math.abs(joystickY) < 0.1) {
+                        joystickX = gamepad.axes[0] || 0;
+                        joystickY = gamepad.axes[1] || 0;
+                    }
+                }
+                
+                // Zona muerta
+                const deadZone = 0.15;
+                
+                if (Math.abs(joystickX) > deadZone || Math.abs(joystickY) > deadZone) {
+                    // DEBUG: Solo mostrar si hay movimiento significativo
+                    if (Math.abs(joystickX) > deadZone * 2 || Math.abs(joystickY) > deadZone * 2) {
+                        console.log(`🎮 Controlador ${i} (${inputSource.handedness}):`);
+                        console.log(`   Ejes: [0]=${gamepad.axes[0]?.toFixed(2)}, [1]=${gamepad.axes[1]?.toFixed(2)}, [2]=${gamepad.axes[2]?.toFixed(2)}, [3]=${gamepad.axes[3]?.toFixed(2)}`);
+                        console.log(`   Usando: X=${joystickX.toFixed(2)}, Y=${joystickY.toFixed(2)}`);
+                    }
+                    
+                    // MOVIMIENTO BASADO EN LA DIRECCIÓN DE LA CABEZA
+                    if (Math.abs(joystickY) > deadZone) {
+                        const forward = new THREE.Vector3(0, 0, -1);
+                        forward.applyQuaternion(camera.quaternion);
+                        forward.y = 0;
+                        forward.normalize();
+                        
+                        camera.position.add(forward.multiplyScalar(-joystickY * vrMoveSpeed * 1.5));
+                    }
+                    
+                    if (Math.abs(joystickX) > deadZone) {
+                        const right = new THREE.Vector3(1, 0, 0);
+                        right.applyQuaternion(camera.quaternion);
+                        right.y = 0;
+                        right.normalize();
+                        
+                        camera.position.add(right.multiplyScalar(joystickX * vrMoveSpeed * 1.5));
+                    }
+                }
+            }
+            
+            // 🎮 MOVIMIENTO CON BOTONES (alternativo)
+            if (gamepad.buttons && gamepad.buttons.length >= 7) {
+                // Detectar qué controlador es
+                const isLeftController = inputSource.handedness === 'left';
+                
+                // Botones específicos por controlador
+                if (isLeftController) {
+                    // Controlador izquierdo: Botón A/X (índice 0) para adelante
+                    if (gamepad.buttons[0] && gamepad.buttons[0].pressed) {
+                        console.log('🎮 Botón A/X (izquierdo) - Moviendo adelante');
+                        const forward = new THREE.Vector3(0, 0, -1);
+                        forward.applyQuaternion(camera.quaternion);
+                        forward.y = 0;
+                        forward.normalize();
+                        camera.position.add(forward.multiplyScalar(vrMoveSpeed));
+                    }
+                    
+                    // Controlador izquierdo: Botón B/Y (índice 1) para atrás
+                    if (gamepad.buttons[1] && gamepad.buttons[1].pressed) {
+                        console.log('🎮 Botón B/Y (izquierdo) - Moviendo atrás');
+                        const backward = new THREE.Vector3(0, 0, 1);
+                        backward.applyQuaternion(camera.quaternion);
+                        backward.y = 0;
+                        backward.normalize();
+                        camera.position.add(backward.multiplyScalar(vrMoveSpeed));
+                    }
+                } else {
+                    // Controlador derecho: Botón A/X (índice 4) para adelante
+                    if (gamepad.buttons[4] && gamepad.buttons[4].pressed) {
+                        console.log('🎮 Botón A/X (derecho) - Moviendo adelante');
+                        const forward = new THREE.Vector3(0, 0, -1);
+                        forward.applyQuaternion(camera.quaternion);
+                        forward.y = 0;
+                        forward.normalize();
+                        camera.position.add(forward.multiplyScalar(vrMoveSpeed));
+                    }
+                    
+                    // Controlador derecho: Botón B/Y (índice 5) para atrás
+                    if (gamepad.buttons[5] && gamepad.buttons[5].pressed) {
+                        console.log('🎮 Botón B/Y (derecho) - Moviendo atrás');
+                        const backward = new THREE.Vector3(0, 0, 1);
+                        backward.applyQuaternion(camera.quaternion);
+                        backward.y = 0;
+                        backward.normalize();
+                        camera.position.add(backward.multiplyScalar(vrMoveSpeed));
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ==================== EVENTOS VR META QUEST 3 ====================
 function onVRSelectStart(event) {
     const controller = event.target;
     console.log('🎮 Trigger presionado en VR');
@@ -297,7 +364,7 @@ function onVRSelectStart(event) {
     if (keyIntersects.length > 0) {
         collectKey(keyIntersects[0].object);
         
-        // Efecto visual
+        // Efecto visual y háptico
         const pointer = controller.getObjectByName('pointer');
         if (pointer) {
             pointer.material.color.setHex(0xffaa00);
@@ -305,13 +372,24 @@ function onVRSelectStart(event) {
                 if (pointer) pointer.material.color.setHex(0x00ff00);
             }, 200);
         }
+        
+        // Vibrar controlador (si está disponible)
+        if (controller.inputSource && controller.inputSource.gamepad && 
+            controller.inputSource.gamepad.hapticActuators && 
+            controller.inputSource.gamepad.hapticActuators[0]) {
+            controller.inputSource.gamepad.hapticActuators[0].pulse(0.5, 100);
+        }
+        
         return;
     }
     
-    // Cambiar color del rayo
+    // Cambiar color del rayo si no hay nada
     const pointer = controller.getObjectByName('pointer');
     if (pointer) {
         pointer.material.color.setHex(0xff0000);
+        setTimeout(() => {
+            if (pointer) pointer.material.color.setHex(0x00ff00);
+        }, 100);
     }
 }
 
@@ -324,83 +402,12 @@ function onVRSelectEnd(event) {
 }
 
 function onVRSqueezeStart(event) {
-    console.log('🎮 Grip presionado - Movimiento VR activado');
-    // Aquí podríamos activar movimiento continuo
+    console.log('🎮 Grip presionado - Modo especial activado');
+    // Podríamos activar modo de teleporte o algo especial
 }
 
 function onVRSqueezeEnd(event) {
     console.log('🎮 Grip liberado');
-}
-
-// ==================== MOVIMIENTO VR CON JOYSTICK ====================
-function updateVRMovement() {
-    if (!isInVR || !renderer.xr.isPresenting) return;
-    
-    const session = renderer.xr.getSession();
-    if (!session || !session.inputSources) return;
-    
-    // Revisar ambos controladores
-    for (let i = 0; i < Math.min(2, session.inputSources.length); i++) {
-        const inputSource = session.inputSources[i];
-        if (inputSource && inputSource.gamepad) {
-            const gamepad = inputSource.gamepad;
-            
-            // DEBUG: Mostrar información del joystick
-            if (gamepad.axes && gamepad.axes.length >= 2) {
-                const joystickX = gamepad.axes[0];
-                const joystickY = gamepad.axes[1];
-                
-                // Solo mostrar si hay movimiento significativo
-                if (Math.abs(joystickX) > 0.1 || Math.abs(joystickY) > 0.1) {
-                    console.log(`🎮 Controlador ${i}: X=${joystickX.toFixed(2)}, Y=${joystickY.toFixed(2)}`);
-                }
-                
-                // MOVIMIENTO CON JOYSTICK
-                const deadZone = 0.15;
-                
-                if (Math.abs(joystickY) > deadZone) {
-                    // Movimiento hacia adelante/atrás basado en la dirección de la cabeza
-                    const forward = new THREE.Vector3(0, 0, -1);
-                    forward.applyQuaternion(camera.quaternion);
-                    forward.y = 0;
-                    forward.normalize();
-                    
-                    camera.position.add(forward.multiplyScalar(-joystickY * vrMoveSpeed));
-                }
-                
-                if (Math.abs(joystickX) > deadZone) {
-                    // Movimiento lateral
-                    const right = new THREE.Vector3(1, 0, 0);
-                    right.applyQuaternion(camera.quaternion);
-                    right.y = 0;
-                    right.normalize();
-                    
-                    camera.position.add(right.multiplyScalar(joystickX * vrMoveSpeed));
-                }
-            }
-            
-            // También probar con botones específicos para movimiento
-            if (gamepad.buttons && gamepad.buttons.length >= 4) {
-                // Botón A/X para mover adelante
-                if (gamepad.buttons[0] && gamepad.buttons[0].pressed) {
-                    const forward = new THREE.Vector3(0, 0, -1);
-                    forward.applyQuaternion(camera.quaternion);
-                    forward.y = 0;
-                    forward.normalize();
-                    camera.position.add(forward.multiplyScalar(vrMoveSpeed));
-                }
-                
-                // Botón B/Y para mover atrás
-                if (gamepad.buttons[1] && gamepad.buttons[1].pressed) {
-                    const backward = new THREE.Vector3(0, 0, 1);
-                    backward.applyQuaternion(camera.quaternion);
-                    backward.y = 0;
-                    backward.normalize();
-                    camera.position.add(backward.multiplyScalar(vrMoveSpeed));
-                }
-            }
-        }
-    }
 }
 
 // ==================== JUEGO ====================
@@ -408,8 +415,8 @@ async function initGame() {
     console.log('🎮 Inicializando juego...');
     await loadEnvironment();
     loadAudio();
-    createMaze();      // LABERINTO MÁS GRANDE
-    createKeys();      // MÁS LLAVES
+    createMaze();
+    createKeys();
     createLighting();
     gameStarted = true;
     console.log('✅ Juego inicializado');
@@ -424,7 +431,7 @@ async function loadEnvironment() {
         scene.environment = texture;
         console.log('✅ HDRI cargado');
     } catch (error) {
-        console.warn('⚠️ Usando color sólido');
+        console.warn('⚠️ Usando color sólido para mejor performance en Quest');
         scene.background = new THREE.Color(0x0a0a12);
     }
 }
@@ -435,6 +442,7 @@ function loadAudio() {
 
     const audioLoader = new THREE.AudioLoader();
     
+    // Sonido ambiental
     audioLoader.load('https://assets.mixkit.co/sfx/preview/mixkit-cold-wind-1151.mp3', (buffer) => {
         windSound = new THREE.Audio(audioListener);
         windSound.setBuffer(buffer);
@@ -444,6 +452,7 @@ function loadAudio() {
         console.log('✅ Sonido ambiental cargado');
     });
     
+    // Sonido de victoria
     audioLoader.load('https://assets.mixkit.co/sfx/preview/mixkit-winning-chimes-2015.mp3', (buffer) => {
         victorySound = new THREE.Audio(audioListener);
         victorySound.setBuffer(buffer);
@@ -452,11 +461,10 @@ function loadAudio() {
     });
 }
 
-// ==================== LABERINTO MÁS GRANDE (15x15) ====================
+// ==================== LABERINTO GRANDE (15x15) ====================
 function createMaze() {
-    console.log('🧱 Creando laberinto GRANDE (15x15)...');
+    console.log('🧱 Creando laberinto GRANDE 15x15 para Meta Quest 3...');
     
-    // Laberinto 15x15 con más rutas complejas
     const mazeMap = [
         [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
         [1,0,0,0,0,0,1,0,0,0,0,0,0,0,1],
@@ -476,13 +484,13 @@ function createMaze() {
     ];
 
     const wallMaterial = new THREE.MeshStandardMaterial({ 
-        color: 0x2a2a3a, 
-        roughness: 0.8,
-        metalness: 0.3
+        color: 0x2a2a3a,
+        roughness: 0.9, // Menos reflejos para mejor performance
+        metalness: 0.2
     });
 
     const mazeSize = 15;
-    const wallSpacing = 2.5; // Un poco más de espacio
+    const wallSpacing = 2.5;
     
     for (let z = 0; z < mazeSize; z++) {
         for (let x = 0; x < mazeSize; x++) {
@@ -491,7 +499,6 @@ function createMaze() {
                     new THREE.BoxGeometry(wallSpacing, 2, wallSpacing),
                     wallMaterial
                 );
-                // Centrar el laberinto
                 const offset = (mazeSize * wallSpacing) / 2 - wallSpacing / 2;
                 wall.position.set(
                     x * wallSpacing - offset, 
@@ -506,14 +513,13 @@ function createMaze() {
         }
     }
 
-    // Piso más grande
+    // Piso grande
     const floorSize = mazeSize * wallSpacing + 10;
     const floor = new THREE.Mesh(
         new THREE.PlaneGeometry(floorSize, floorSize),
         new THREE.MeshStandardMaterial({ 
-            color: 0x151525, 
-            roughness: 0.9,
-            metalness: 0.1
+            color: 0x151525,
+            roughness: 1.0 // Sin reflejos para mejor performance
         })
     );
     floor.rotation.x = -Math.PI / 2;
@@ -521,95 +527,63 @@ function createMaze() {
     floor.name = 'floor';
     scene.add(floor);
     
-    console.log(`✅ Laberinto creado (${mazeSize}x${mazeSize}, tamaño: ${floorSize}x${floorSize})`);
+    console.log(`✅ Laberinto 15x15 creado (${floorSize}x${floorSize} unidades)`);
 }
 
-// ==================== CREAR MÁS BOLAS AMARILLAS (8 LLAVES) ====================
+// ==================== CREAR 8 BOLAS AMARILLAS ====================
 function createKeys() {
-    console.log('🌟 Creando 8 bolas amarillas (llaves)...');
+    console.log('🌟 Creando 8 bolas amarillas para Meta Quest 3...');
     
-    // Posiciones distribuidas por todo el laberinto grande
     const keyPositions = [
-        // Zona 1: Cerca del inicio
         new THREE.Vector3(-12, 1.5, -12),
         new THREE.Vector3(-8, 1.5, -10),
-        
-        // Zona 2: Centro izquierdo
         new THREE.Vector3(-15, 1.5, 0),
         new THREE.Vector3(-10, 1.5, 5),
-        
-        // Zona 3: Centro
         new THREE.Vector3(0, 1.5, 0),
         new THREE.Vector3(5, 1.5, -5),
-        
-        // Zona 4: Centro derecho
         new THREE.Vector3(12, 1.5, 8),
-        new THREE.Vector3(15, 1.5, 2),
-        
-        // Zona 5: Lejos
-        new THREE.Vector3(8, 1.5, 12),
-        new THREE.Vector3(-5, 1.5, 15)
+        new THREE.Vector3(15, 1.5, 2)
     ];
 
     for (let i = 0; i < totalKeys; i++) {
-        try {
-            // BOLA AMARILLA - Esfera dorada brillante
-            const keyGeometry = new THREE.SphereGeometry(0.3, 32, 32);
-            const keyMaterial = new THREE.MeshStandardMaterial({ 
-                color: 0xFFD700,
-                emissive: 0xFFAA00,
-                emissiveIntensity: 0.5,
-                metalness: 0.9,
-                roughness: 0.1,
-                transparent: true,
-                opacity: 0.9
-            });
-            
-            const key = new THREE.Mesh(keyGeometry, keyMaterial);
-            // Usar posiciones predefinidas o aleatorias
-            if (i < keyPositions.length) {
-                key.position.copy(keyPositions[i]);
-            } else {
-                // Posición aleatoria si necesitamos más
-                key.position.set(
-                    (Math.random() - 0.5) * 30,
-                    1.5,
-                    (Math.random() - 0.5) * 30
-                );
-            }
-            key.userData.isKey = true;
-            key.userData.collected = false;
-            key.userData.id = i;
-            key.name = `bola_amarilla_${i}`;
-            
-            // Añadir punto de luz AMARILLO alrededor de la bola
-            const keyLight = new THREE.PointLight(0xFFD700, 1.0, 8); // Luz más fuerte y con mayor alcance
-            keyLight.position.copy(key.position);
-            keyLight.position.y += 0.2;
-            scene.add(keyLight);
-            
-            // Añadir halo de partículas alrededor
-            createKeyHalo(key.position, i);
-            
-            scene.add(key);
-            keys.push(key);
-            
-            console.log(`✅ Bola amarilla ${i+1} creada en:`, key.position.toArray());
-            
-        } catch (error) {
-            console.error('❌ Error creando bola amarilla:', error);
-        }
+        const keyGeometry = new THREE.SphereGeometry(0.35, 24, 24); // Optimizado para VR
+        const keyMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0xFFD700,
+            emissive: 0xFFAA00,
+            emissiveIntensity: 0.4,
+            metalness: 0.7,
+            roughness: 0.3
+        });
+        
+        const key = new THREE.Mesh(keyGeometry, keyMaterial);
+        key.position.copy(keyPositions[i]);
+        key.userData.isKey = true;
+        key.userData.collected = false;
+        key.userData.id = i;
+        key.name = `bola_amarilla_${i}`;
+        
+        // Luz optimizada para VR
+        const keyLight = new THREE.PointLight(0xFFD700, 0.8, 6);
+        keyLight.position.copy(key.position);
+        keyLight.position.y += 0.2;
+        scene.add(keyLight);
+        
+        // Halo simplificado para mejor performance
+        createKeyHalo(key.position, i);
+        
+        scene.add(key);
+        keys.push(key);
     }
-    console.log(`✅ ${totalKeys} bolas amarillas creadas en el laberinto grande`);
+    console.log(`✅ ${totalKeys} bolas amarillas creadas`);
 }
 
 function createKeyHalo(position, keyIndex) {
-    const haloGeometry = new THREE.RingGeometry(0.4, 0.5, 32);
+    const haloGeometry = new THREE.RingGeometry(0.5, 0.6, 16); // Menos polígonos
     const haloMaterial = new THREE.MeshBasicMaterial({
         color: 0xFFD700,
         side: THREE.DoubleSide,
         transparent: true,
-        opacity: 0.3
+        opacity: 0.2
     });
     
     const halo = new THREE.Mesh(haloGeometry, haloMaterial);
@@ -622,52 +596,37 @@ function createKeyHalo(position, keyIndex) {
 }
 
 function createLighting() {
-    console.log('💡 Creando iluminación para laberinto grande...');
+    console.log('💡 Creando iluminación optimizada para Quest 3...');
     
-    // Luz ambiental más intensa para laberinto grande
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+    // Luz ambiental
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
     scene.add(ambientLight);
 
     // Luz direccional principal
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
-    directionalLight.position.set(20, 40, 10);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    directionalLight.position.set(20, 30, 10);
     directionalLight.castShadow = true;
-    directionalLight.shadow.mapSize.width = 4096;
-    directionalLight.shadow.mapSize.height = 4096;
-    directionalLight.shadow.camera.left = -50;
-    directionalLight.shadow.camera.right = 50;
-    directionalLight.shadow.camera.top = 50;
-    directionalLight.shadow.camera.bottom = -50;
+    directionalLight.shadow.mapSize.width = 1024; // Reducido para performance
+    directionalLight.shadow.mapSize.height = 1024;
     scene.add(directionalLight);
 
-    // Luces de acento distribuidas por el laberinto
-    const accentPositions = [
-        { x: -20, y: 5, z: -20, color: 0x00a8ff },
-        { x: 20, y: 5, z: -20, color: 0x00fff7 },
-        { x: -20, y: 5, z: 20, color: 0xff00ff },
-        { x: 20, y: 5, z: 20, color: 0xffaa00 },
-        { x: 0, y: 10, z: 0, color: 0xffffff }
+    // Luces de acento estratégicas
+    const accentLights = [
+        { x: -15, y: 4, z: -15, color: 0x00a8ff, intensity: 0.4 },
+        { x: 15, y: 4, z: -15, color: 0x00fff7, intensity: 0.4 },
+        { x: -15, y: 4, z: 15, color: 0xff00ff, intensity: 0.4 },
+        { x: 15, y: 4, z: 15, color: 0xffaa00, intensity: 0.4 }
     ];
     
-    accentPositions.forEach(pos => {
-        const light = new THREE.PointLight(pos.color, 0.6, 30);
-        light.position.set(pos.x, pos.y, pos.z);
+    accentLights.forEach(lightData => {
+        const light = new THREE.PointLight(lightData.color, lightData.intensity, 20);
+        light.position.set(lightData.x, lightData.y, lightData.z);
         scene.add(light);
-        
-        // Añadir esfera pequeña para ver la posición de la luz
-        const sphere = new THREE.Mesh(
-            new THREE.SphereGeometry(0.2, 8, 8),
-            new THREE.MeshBasicMaterial({ color: pos.color })
-        );
-        sphere.position.copy(light.position);
-        scene.add(sphere);
     });
-    
-    console.log('✅ Iluminación creada para laberinto grande');
 }
 
+// ==================== FUNCIONES DE INTERACCIÓN ====================
 function onDocumentClick(event) {
-    // Para modo escritorio
     if (isInVR) return;
     
     const raycaster = new THREE.Raycaster();
@@ -690,17 +649,12 @@ function collectKey(key) {
     key.visible = false;
     keysCollected++;
     
-    // Ocultar halo también
+    // Ocultar halo y luz
     scene.children.forEach(child => {
         if (child.userData.isHalo && child.userData.parentKey === key.userData.id) {
             child.visible = false;
         }
-    });
-    
-    // Ocultar luz asociada
-    scene.children.forEach(child => {
-        if (child instanceof THREE.PointLight && 
-            child.position.distanceTo(key.position) < 1) {
+        if (child instanceof THREE.PointLight && child.position.distanceTo(key.position) < 1) {
             child.intensity = 0;
         }
     });
@@ -722,38 +676,33 @@ function collectKey(key) {
 }
 
 function createKeyParticles(position) {
-    const particleCount = 30; // Más partículas
+    const particleCount = 15; // Optimizado para VR
     
     for (let i = 0; i < particleCount; i++) {
-        const geometry = new THREE.SphereGeometry(0.05, 8, 8);
+        const geometry = new THREE.SphereGeometry(0.04, 6, 6); // Menos polígonos
         const material = new THREE.MeshBasicMaterial({ color: 0xFFD700 });
         const particle = new THREE.Mesh(geometry, material);
         
         particle.position.copy(position);
-        
-        // Velocidad aleatoria
         particle.userData.velocity = new THREE.Vector3(
-            (Math.random() - 0.5) * 0.3,
-            Math.random() * 0.4,
-            (Math.random() - 0.5) * 0.3
+            (Math.random() - 0.5) * 0.2,
+            Math.random() * 0.3,
+            (Math.random() - 0.5) * 0.2
         );
-        
         particle.userData.life = 1.0;
         scene.add(particle);
         
-        // Animar partícula
         function animateParticle() {
             if (particle.userData.life > 0) {
                 particle.position.add(particle.userData.velocity);
-                particle.userData.velocity.y -= 0.01; // Gravedad
-                particle.userData.life -= 0.03;
+                particle.userData.velocity.y -= 0.01;
+                particle.userData.life -= 0.04;
                 particle.material.opacity = particle.userData.life;
                 requestAnimationFrame(animateParticle);
             } else {
                 scene.remove(particle);
             }
         }
-        
         animateParticle();
     }
 }
@@ -762,42 +711,35 @@ function updateKeyCounter() {
     const counterValue = document.querySelector('.counter-value');
     if (counterValue) {
         counterValue.textContent = `${keysCollected}/${totalKeys}`;
-        // Efecto visual cuando se recogen
         counterValue.style.transform = 'scale(1.2)';
         counterValue.style.color = '#FFD700';
-        setTimeout(() => {
-            counterValue.style.transform = 'scale(1)';
-        }, 300);
+        setTimeout(() => counterValue.style.transform = 'scale(1)', 300);
     }
 }
 
 function showVictory() {
     console.log('🎉 ¡VICTORIA! Todas las bolas amarillas recogidas');
     
-    // Sonido
     if (victorySound) victorySound.play();
     
-    // Actualizar texto de victoria
+    // Actualizar panel de victoria
     const victoryTitle = document.querySelector('.victory-title');
     const victoryMessage = document.querySelector('.victory-message');
     const statValue = document.querySelector('.stat-value');
     
     if (victoryTitle) victoryTitle.textContent = '¡LABERINTO GIGANTE COMPLETADO!';
-    if (victoryMessage) victoryMessage.textContent = `Encontraste las ${totalKeys} llaves en el laberinto más grande`;
+    if (victoryMessage) victoryMessage.textContent = `Encontraste las ${totalKeys} llaves en el laberinto 15x15`;
     if (statValue) statValue.textContent = `${totalKeys}/${totalKeys}`;
     
-    // Mostrar panel
     victoryPanel.style.display = 'flex';
-    
-    // Confeti más grande
     createConfetti();
 }
 
 function createConfetti() {
-    const confettiCount = 150; // Más confeti
+    const confettiCount = 80; // Optimizado para VR
     
     for (let i = 0; i < confettiCount; i++) {
-        const geometry = new THREE.PlaneGeometry(0.15, 0.15);
+        const geometry = new THREE.PlaneGeometry(0.08, 0.08); // Más pequeño
         const material = new THREE.MeshBasicMaterial({
             color: Math.random() * 0xffffff,
             side: THREE.DoubleSide
@@ -805,34 +747,24 @@ function createConfetti() {
         const confetti = new THREE.Mesh(geometry, material);
         
         confetti.position.set(
-            (Math.random() - 0.5) * 30,
-            Math.random() * 10 + 5,
-            (Math.random() - 0.5) * 30
-        );
-        
-        confetti.rotation.set(
-            Math.random() * Math.PI,
-            Math.random() * Math.PI,
-            Math.random() * Math.PI
+            (Math.random() - 0.5) * 20,
+            Math.random() * 8 + 5,
+            (Math.random() - 0.5) * 20
         );
         
         scene.add(confetti);
         
-        const speed = 0.02 + Math.random() * 0.03;
-        const rotationSpeed = (Math.random() - 0.5) * 0.1;
+        const speed = 0.02 + Math.random() * 0.02;
         
         function animateConfetti() {
             confetti.position.y -= speed;
-            confetti.rotation.x += rotationSpeed;
-            confetti.rotation.z += rotationSpeed;
-            
-            if (confetti.position.y > -10) {
+            confetti.rotation.z += 0.05;
+            if (confetti.position.y > -5) {
                 requestAnimationFrame(animateConfetti);
             } else {
                 scene.remove(confetti);
             }
         }
-        
         animateConfetti();
     }
 }
@@ -840,17 +772,12 @@ function createConfetti() {
 // ==================== ANIMACIÓN ====================
 function animate() {
     if (gameStarted) {
-        // Rotar y hacer flotar las bolas amarillas
+        // Rotar y flotar bolas amarillas
         keys.forEach(key => {
             if (key && !key.userData.collected) {
-                // Rotación más lenta para no marear en VR
                 key.rotation.y += 0.015;
-                key.rotation.x += 0.007;
-                
-                // Flotación suave
                 key.position.y = 1.5 + Math.sin(Date.now() * 0.001 + key.userData.id) * 0.2;
                 
-                // Rotar halos también
                 scene.children.forEach(child => {
                     if (child.userData.isHalo && child.userData.parentKey === key.userData.id) {
                         child.position.y = key.position.y + 0.1;
@@ -860,41 +787,85 @@ function animate() {
             }
         });
         
-        // Actualizar controles según el modo
+        // Actualizar movimiento según modo
         if (!isInVR) {
             controls.update();
             updateMovement();
         } else {
-            // En VR, actualizar movimiento con joystick
             updateVRMovement();
         }
     }
     
-    renderer.render(scene, camera);
+    if (renderer && scene && camera) {
+        renderer.render(scene, camera);
+    }
 }
 
+// ==================== FUNCIONES DE MOVIMIENTO ====================
+function initMovementControls() {
+    document.addEventListener('keydown', (event) => {
+        switch (event.code) {
+            case 'KeyW': case 'ArrowUp': moveForward = true; break;
+            case 'KeyS': case 'ArrowDown': moveBackward = true; break;
+            case 'KeyA': case 'ArrowLeft': moveLeft = true; break;
+            case 'KeyD': case 'ArrowRight': moveRight = true; break;
+        }
+    });
+
+    document.addEventListener('keyup', (event) => {
+        switch (event.code) {
+            case 'KeyW': case 'ArrowUp': moveForward = false; break;
+            case 'KeyS': case 'ArrowDown': moveBackward = false; break;
+            case 'KeyA': case 'ArrowLeft': moveLeft = false; break;
+            case 'KeyD': case 'ArrowRight': moveRight = false; break;
+        }
+    });
+}
+
+function updateMovement() {
+    if (!isInVR) {
+        if (moveForward) {
+            camera.position.x -= Math.sin(camera.rotation.y) * moveSpeed;
+            camera.position.z -= Math.cos(camera.rotation.y) * moveSpeed;
+        }
+        if (moveBackward) {
+            camera.position.x += Math.sin(camera.rotation.y) * moveSpeed;
+            camera.position.z += Math.cos(camera.rotation.y) * moveSpeed;
+        }
+        if (moveLeft) {
+            camera.position.x -= Math.cos(camera.rotation.y) * moveSpeed;
+            camera.position.z += Math.sin(camera.rotation.y) * moveSpeed;
+        }
+        if (moveRight) {
+            camera.position.x += Math.cos(camera.rotation.y) * moveSpeed;
+            camera.position.z -= Math.sin(camera.rotation.y) * moveSpeed;
+        }
+    }
+}
+
+// ==================== FUNCIONES UI Y UTILIDADES ====================
 function onWindowResize() {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    if (camera && renderer) {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    }
 }
 
 function createParticles() {
     const particlesContainer = document.querySelector('.particles-container');
-    const particleCount = 50;
-    
-    for (let i = 0; i < particleCount; i++) {
+    for (let i = 0; i < 40; i++) {
         const particle = document.createElement('div');
         particle.classList.add('particle');
         particle.style.cssText = `
             position: absolute;
-            width: ${Math.random() * 4 + 1}px;
-            height: ${Math.random() * 4 + 1}px;
-            background: rgba(0, 168, 255, ${Math.random() * 0.5 + 0.1});
+            width: ${Math.random() * 3 + 1}px;
+            height: ${Math.random() * 3 + 1}px;
+            background: rgba(0, 168, 255, ${Math.random() * 0.4 + 0.1});
             border-radius: 50%;
             left: ${Math.random() * 100}%;
             top: ${Math.random() * 100}%;
-            animation: float ${Math.random() * 10 + 5}s infinite linear;
+            animation: float ${Math.random() * 8 + 4}s infinite linear;
         `;
         particlesContainer.appendChild(particle);
     }
@@ -911,7 +882,6 @@ function createParticles() {
     document.head.appendChild(style);
 }
 
-// ==================== FUNCIONES UI ====================
 function restartGame() {
     victoryPanel.style.display = 'none';
     keysCollected = 0;
@@ -922,17 +892,10 @@ function restartGame() {
         key.visible = true;
     });
     
-    // Reactivar halos
     scene.children.forEach(child => {
-        if (child.userData.isHalo) {
-            child.visible = true;
-        }
-    });
-    
-    // Reactivar luces
-    scene.children.forEach(child => {
+        if (child.userData.isHalo) child.visible = true;
         if (child instanceof THREE.PointLight && child.intensity === 0) {
-            child.intensity = 1.0;
+            child.intensity = 0.8;
         }
     });
     
@@ -944,7 +907,6 @@ function backToMenu() {
     gameContainer.style.display = 'none';
     startScreen.style.display = 'flex';
     startScreen.style.opacity = '1';
-    
     if (windSound) windSound.stop();
     restartGame();
     exitVR();
@@ -956,63 +918,85 @@ function exitVR() {
     }
 }
 
-// ==================== INICIAR ====================
-window.addEventListener('DOMContentLoaded', init);
+// ==================== INFORMACIÓN DE CONTROLES VR ====================
+function showVRControlsInfo() {
+    const controlsInfo = document.createElement('div');
+    controlsInfo.id = 'vr-controls-info';
+    controlsInfo.innerHTML = `
+        <div style="
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 14px;
+            z-index: 1000;
+            border: 2px solid #00a8ff;
+            max-width: 300px;
+        ">
+            <h3 style="margin: 0 0 10px 0; color: #00fff7;">🎮 CONTROLES META QUEST 3</h3>
+            <div style="margin-bottom: 8px;"><strong>Joystick Izquierdo:</strong> Movimiento</div>
+            <div style="margin-bottom: 8px;"><strong>Trigger (Gatillo):</strong> Recoger llaves</div>
+            <div style="margin-bottom: 8px;"><strong>Botón A/X:</strong> Movimiento adelante</div>
+            <div style="margin-bottom: 8px;"><strong>Botón B/Y:</strong> Movimiento atrás</div>
+            <div style="color: #ffaa00; font-size: 12px;">Apaga los guardianes para mejor experiencia</div>
+        </div>
+    `;
+    document.body.appendChild(controlsInfo);
+    
+    setTimeout(() => {
+        if (controlsInfo.parentNode) {
+            controlsInfo.style.opacity = '0';
+            controlsInfo.style.transition = 'opacity 1s';
+            setTimeout(() => {
+                if (controlsInfo.parentNode) {
+                    controlsInfo.parentNode.removeChild(controlsInfo);
+                }
+            }, 1000);
+        }
+    }, 10000); // Mostrar por 10 segundos
+}
 
-// ==================== DEBUG PARA CONTROLES ====================
-window.debugControls = {
-    // Probar joystick
-    testJoystick: () => {
+function hideVRControlsInfo() {
+    const info = document.getElementById('vr-controls-info');
+    if (info && info.parentNode) {
+        info.parentNode.removeChild(info);
+    }
+}
+
+// ==================== DEBUG PARA QUEST 3 ====================
+window.debugQuest3 = {
+    testControllers: () => {
         const session = renderer.xr.getSession();
         if (session && session.inputSources) {
+            console.log('🎮=== DEBUG META QUEST 3 ===');
             session.inputSources.forEach((source, index) => {
                 if (source.gamepad) {
-                    console.log(`🎮 Controlador ${index}:`, {
-                        id: source.gamepad.id,
-                        axes: source.gamepad.axes.map(a => a.toFixed(3)),
-                        buttons: source.gamepad.buttons.map(b => b.pressed)
-                    });
+                    console.log(`Controlador ${index} (${source.handedness}):`);
+                    console.log('  Botones:', source.gamepad.buttons.map((b, i) => 
+                        `${i}: ${b.pressed ? 'PRESSED' : 'released'} (${b.value.toFixed(2)})`
+                    ).join(', '));
+                    console.log('  Ejes:', source.gamepad.axes.map((a, i) => 
+                        `${i}: ${a.toFixed(3)}`
+                    ).join(', '));
                 }
             });
+            console.log('============================');
         }
     },
     
-    // Forzar movimiento
-    move: (direction) => {
-        const dirMap = {
-            'forward': new THREE.Vector3(0, 0, -1),
-            'backward': new THREE.Vector3(0, 0, 1),
-            'left': new THREE.Vector3(-1, 0, 0),
-            'right': new THREE.Vector3(1, 0, 0)
-        };
-        
-        if (dirMap[direction]) {
-            const moveDir = dirMap[direction].clone();
-            moveDir.applyQuaternion(camera.quaternion);
-            moveDir.y = 0;
-            moveDir.normalize();
-            camera.position.add(moveDir.multiplyScalar(2.0)); // Movimiento más rápido para debug
-            console.log(`📍 Movido hacia ${direction}`);
+    moveToKey: (keyIndex) => {
+        if (keyIndex >= 0 && keyIndex < keys.length) {
+            const key = keys[keyIndex];
+            camera.position.copy(key.position);
+            camera.position.y = 1.6;
+            console.log(`📍 Teletransportado a llave ${keyIndex}`);
         }
-    },
-    
-    // Mostrar posición
-    showPosition: () => {
-        console.log('📍 Posición:', camera.position);
-        console.log('🎯 Rotación:', camera.rotation);
-    },
-    
-    // Teletransportar a posición
-    teleport: (x, y, z) => {
-        camera.position.set(x, y || 1.6, z);
-        console.log(`📍 Teletransportado a: (${x}, ${y || 1.6}, ${z})`);
-    },
-    
-    // Ver estado de las llaves
-    checkKeys: () => {
-        console.log(`🗝️ Llaves: ${keysCollected}/${totalKeys} recogidas`);
-        keys.forEach((key, i) => {
-            console.log(`  Llave ${i}: ${key.userData.collected ? 'RECOGIDA' : 'DISPONIBLE'} en ${key.position.toArray()}`);
-        });
     }
 };
+
+// ==================== INICIAR ====================
+window.addEventListener('DOMContentLoaded', init);
