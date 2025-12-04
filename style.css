@@ -829,3 +829,59 @@ canvas {
     transform: translateY(-2px) !important;
     box-shadow: 0 5px 15px rgba(0, 168, 255, 0.4) !important;
 }
+
+/* ===== MEJORAS PARA EL LABERINTO GRANDE ===== */
+
+/* Contador de llaves con número más grande */
+.counter-value {
+    font-size: 1.8rem !important;
+    font-weight: 800 !important;
+}
+
+/* Instrucciones más visibles */
+.game-instructions {
+    background: rgba(10, 15, 30, 0.9) !important;
+    padding: 15px !important;
+    border-radius: 10px !important;
+    border: 2px solid rgba(0, 168, 255, 0.5) !important;
+}
+
+/* Panel de victoria actualizado */
+.victory-content {
+    max-width: 700px !important;
+    padding: 60px !important;
+}
+
+.victory-title {
+    font-size: 2.5rem !important;
+    margin-bottom: 20px !important;
+}
+
+.victory-message {
+    font-size: 1.3rem !important;
+    margin-bottom: 40px !important;
+}
+
+/* Estilos para el botón VR */
+.custom-vr-button {
+    position: absolute !important;
+    bottom: 20px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    z-index: 1000 !important;
+    background: linear-gradient(90deg, #00a8ff, #00fff7) !important;
+    border: none !important;
+    color: white !important;
+    padding: 12px 24px !important;
+    border-radius: 8px !important;
+    font-family: 'Orbitron', sans-serif !important;
+    font-weight: 600 !important;
+    letter-spacing: 1px !important;
+    cursor: pointer !important;
+    transition: all 0.3s ease !important;
+}
+
+.custom-vr-button:hover {
+    transform: translateX(-50%) translateY(-2px) !important;
+    box-shadow: 0 5px 15px rgba(0, 168, 255, 0.4) !important;
+}
